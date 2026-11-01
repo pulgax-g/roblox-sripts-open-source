@@ -1,0 +1,6682 @@
+_G.DiabloLocals = _G.DiabloLocals or {}
+for _, obj in getgc(true) do
+    if typeof(obj) ~= "table" or getrawmetatable(obj) then continue end
+    local mainrun = false
+    for _, v in obj do
+        if v == obj then mainrun = true break end
+    end
+    if not mainrun then continue end
+    for _, v in obj do
+        if typeof(v) == "number" and v >= 1 and v <= 3 and obj[v] == nil then
+            setmetatable(obj, {__newindex = function() end})
+            break
+        end
+    end
+end
+local WindUI = loadstring(game:HttpGet(
+    "https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"
+))()
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+
+local VERSION = "v1.3.8"
+local DEFAULT_KEY = "K"
+local DEFAULT_THEME = "Willow Rose"
+local ANALYZER_NAME = "Zyrqon"
+
+local API_NAMES = {
+    "Zyrqon",
+    "Zyrqon Nova",
+    "Lith",
+    "Null",
+    "Muse",
+}
+
+local API_URLS = {
+    ["Zyrqon"] = "LOCAL",
+    ["Zyrqon Nova"] = "https://raw.githubusercontent.com/jalokol/Grav/refs/heads/main/Nova",
+    ["Lith"] = "https://raw.githubusercontent.com/jalokol/Grav/refs/heads/main/Lith",
+    ["Null"] = "https://raw.githubusercontent.com/jalokol/Grav/refs/heads/main/Null",
+    ["Muse"] = "https://raw.githubusercontent.com/jalokol/Grav/refs/heads/main/Muse",
+}
+
+local CurrentKey = DEFAULT_KEY
+local CurrentTheme = DEFAULT_THEME
+
+local NotificationsSilenced = false
+local NotificationBusy = false
+local SelectedConfig = nil
+
+local DiscordInvite = "YOUR_DISCORD_INVITE"
+local DiscordAPI =
+    "https://discord.com/api/v10/invites/"
+    .. DiscordInvite
+    .. "?with_counts=true&with_expiration=true"
+
+local Themes = {}
+
+local function Gradient(colors, rotation)
+    local points = {}
+
+    for position, color in pairs(colors) do
+        if type(color) == "table" then
+            points[position] = {
+                Color = Color3.fromHex(color.Color),
+                Transparency = color.Transparency or 0,
+            }
+        else
+            points[position] = {
+                Color = Color3.fromHex(color),
+                Transparency = 0,
+            }
+        end
+    end
+
+    return WindUI:Gradient(points, {
+        Rotation = rotation or 45,
+    })
+end
+
+local function CreateTheme(
+    name,
+    accent,
+    background,
+    outline,
+    button,
+    icon
+)
+    local theme = {
+        Name = name,
+
+        Accent = accent,
+        Background = background,
+        Outline = outline,
+
+        Text = Color3.fromHex("#FFFFFF"),
+        Placeholder = Color3.fromHex("#B8A0A8"),
+
+        Button = button,
+        Icon = icon,
+    }
+
+    Themes[name] = theme
+
+    WindUI:AddTheme(theme)
+end
+
+CreateTheme(
+    "Willow Rose",
+
+    Gradient({
+        ["0"] = "#711E42",
+        ["50"] = "#E45B91",
+        ["100"] = "#711E42",
+    }, 45),
+
+    Gradient({
+        ["0"] = {
+            Color = "#0B0408",
+            Transparency = 0.06,
+        },
+
+        ["25"] = {
+            Color = "#190812",
+            Transparency = 0.08,
+        },
+
+        ["50"] = {
+            Color = "#351126",
+            Transparency = 0.10,
+        },
+
+        ["75"] = {
+            Color = "#711E42",
+            Transparency = 0.13,
+        },
+
+        ["100"] = {
+            Color = "#0B0408",
+            Transparency = 0.06,
+        },
+    }, 135),
+
+    Gradient({
+        ["0"] = {
+            Color = "#4B1730",
+            Transparency = 0.45,
+        },
+
+        ["50"] = {
+            Color = "#D14F85",
+            Transparency = 0.22,
+        },
+
+        ["100"] = {
+            Color = "#5A1C39",
+            Transparency = 0.42,
+        },
+    }, 90),
+
+    Gradient({
+        ["0"] = {
+            Color = "#2A0C1C",
+            Transparency = 0.72,
+        },
+
+        ["50"] = {
+            Color = "#7E2850",
+            Transparency = 0.61,
+        },
+
+        ["100"] = {
+            Color = "#2A0C1C",
+            Transparency = 0.74,
+        },
+    }, 90),
+
+    Color3.fromHex("#FFFFFF")
+)
+
+CreateTheme(
+    "Willow Noir",
+
+    Gradient({
+        ["0"] = "#111111",
+        ["25"] = "#252525",
+        ["50"] = "#777777",
+        ["75"] = "#252525",
+        ["100"] = "#111111",
+    }, 45),
+
+    Gradient({
+        ["0"] = {
+            Color = "#050505",
+            Transparency = 0.05,
+        },
+
+        ["30"] = {
+            Color = "#101010",
+            Transparency = 0.07,
+        },
+
+        ["55"] = {
+            Color = "#202020",
+            Transparency = 0.10,
+        },
+
+        ["75"] = {
+            Color = "#333333",
+            Transparency = 0.13,
+        },
+
+        ["100"] = {
+            Color = "#050505",
+            Transparency = 0.05,
+        },
+    }, 135),
+
+    Gradient({
+        ["0"] = {
+            Color = "#FFFFFF",
+            Transparency = 0.78,
+        },
+
+        ["50"] = {
+            Color = "#8D8D8D",
+            Transparency = 0.45,
+        },
+
+        ["100"] = {
+            Color = "#FFFFFF",
+            Transparency = 0.80,
+        },
+    }, 90),
+
+    Gradient({
+        ["0"] = {
+            Color = "#101010",
+            Transparency = 0.70,
+        },
+
+        ["50"] = {
+            Color = "#555555",
+            Transparency = 0.48,
+        },
+
+        ["100"] = {
+            Color = "#101010",
+            Transparency = 0.70,
+        },
+    }, 90),
+
+    Color3.fromHex("#FFFFFF")
+)
+
+CreateTheme(
+    "Willow Crimson",
+
+    Gradient({
+        ["0"] = "#5C0B1C",
+        ["50"] = "#A81738",
+        ["100"] = "#5C0B1C",
+    }, 45),
+
+    Gradient({
+        ["0"] = {
+            Color = "#090306",
+            Transparency = 0.08,
+        },
+
+        ["25"] = {
+            Color = "#14050A",
+            Transparency = 0.09,
+        },
+
+        ["55"] = {
+            Color = "#260710",
+            Transparency = 0.10,
+        },
+
+        ["80"] = {
+            Color = "#5C0B1C",
+            Transparency = 0.14,
+        },
+
+        ["100"] = {
+            Color = "#090306",
+            Transparency = 0.08,
+        },
+    }, 135),
+
+    Gradient({
+        ["0"] = {
+            Color = "#3A0A15",
+            Transparency = 0.45,
+        },
+
+        ["50"] = {
+            Color = "#8B1732",
+            Transparency = 0.22,
+        },
+
+        ["100"] = {
+            Color = "#420A17",
+            Transparency = 0.42,
+        },
+    }, 90),
+
+    Gradient({
+        ["0"] = {
+            Color = "#2A0A14",
+            Transparency = 0.72,
+        },
+
+        ["50"] = {
+            Color = "#70152B",
+            Transparency = 0.61,
+        },
+
+        ["100"] = {
+            Color = "#2A0A14",
+            Transparency = 0.74,
+        },
+    }, 90),
+
+    Color3.fromHex("#FFFFFF")
+)
+
+CreateTheme(
+    "Willow Midnight",
+
+    Gradient({
+        ["0"] = "#171B35",
+        ["50"] = "#4652A8",
+        ["100"] = "#171B35",
+    }, 45),
+
+    Gradient({
+        ["0"] = {
+            Color = "#05060C",
+            Transparency = 0.08,
+        },
+
+        ["25"] = {
+            Color = "#080B17",
+            Transparency = 0.09,
+        },
+
+        ["55"] = {
+            Color = "#11182B",
+            Transparency = 0.10,
+        },
+
+        ["80"] = {
+            Color = "#202B52",
+            Transparency = 0.14,
+        },
+
+        ["100"] = {
+            Color = "#05060C",
+            Transparency = 0.08,
+        },
+    }, 135),
+
+    Gradient({
+        ["0"] = {
+            Color = "#1D2447",
+            Transparency = 0.45,
+        },
+
+        ["50"] = {
+            Color = "#5867C7",
+            Transparency = 0.22,
+        },
+
+        ["100"] = {
+            Color = "#252B55",
+            Transparency = 0.42,
+        },
+    }, 90),
+
+    Gradient({
+        ["0"] = {
+            Color = "#11162D",
+            Transparency = 0.72,
+        },
+
+        ["50"] = {
+            Color = "#303D7D",
+            Transparency = 0.61,
+        },
+
+        ["100"] = {
+            Color = "#11162D",
+            Transparency = 0.74,
+        },
+    }, 90),
+
+    Color3.fromHex("#FFFFFF")
+)
+
+CreateTheme(
+    "Willow Violet",
+
+    Gradient({
+        ["0"] = "#4A176E",
+        ["50"] = "#A44BE2",
+        ["100"] = "#4A176E",
+    }, 45),
+
+    Gradient({
+        ["0"] = {
+            Color = "#08040D",
+            Transparency = 0.08,
+        },
+
+        ["25"] = {
+            Color = "#12071B",
+            Transparency = 0.09,
+        },
+
+        ["55"] = {
+            Color = "#251039",
+            Transparency = 0.10,
+        },
+
+        ["80"] = {
+            Color = "#4A176E",
+            Transparency = 0.14,
+        },
+
+        ["100"] = {
+            Color = "#08040D",
+            Transparency = 0.08,
+        },
+    }, 135),
+
+    Gradient({
+        ["0"] = {
+            Color = "#35144C",
+            Transparency = 0.45,
+        },
+
+        ["50"] = {
+            Color = "#9844CF",
+            Transparency = 0.22,
+        },
+
+        ["100"] = {
+            Color = "#431B5C",
+            Transparency = 0.42,
+        },
+    }, 90),
+
+    Gradient({
+        ["0"] = {
+            Color = "#1D0C2B",
+            Transparency = 0.72,
+        },
+
+        ["50"] = {
+            Color = "#60308A",
+            Transparency = 0.61,
+        },
+
+        ["100"] = {
+            Color = "#1D0C2B",
+            Transparency = 0.74,
+        },
+    }, 90),
+
+    Color3.fromHex("#FFFFFF")
+)
+
+CreateTheme(
+    "Willow Ocean",
+
+    Gradient({
+        ["0"] = "#0B4C67",
+        ["50"] = "#36BFEA",
+        ["100"] = "#0B4C67",
+    }, 45),
+
+    Gradient({
+        ["0"] = {
+            Color = "#03080C",
+            Transparency = 0.08,
+        },
+
+        ["25"] = {
+            Color = "#05131C",
+            Transparency = 0.09,
+        },
+
+        ["55"] = {
+            Color = "#082735",
+            Transparency = 0.10,
+        },
+
+        ["80"] = {
+            Color = "#0B4C67",
+            Transparency = 0.14,
+        },
+
+        ["100"] = {
+            Color = "#03080C",
+            Transparency = 0.08,
+        },
+    }, 135),
+
+    Gradient({
+        ["0"] = {
+            Color = "#0B384A",
+            Transparency = 0.45,
+        },
+
+        ["50"] = {
+            Color = "#36A9D0",
+            Transparency = 0.22,
+        },
+
+        ["100"] = {
+            Color = "#0B4055",
+            Transparency = 0.42,
+        },
+    }, 90),
+
+    Gradient({
+        ["0"] = {
+            Color = "#06212E",
+            Transparency = 0.72,
+        },
+
+        ["50"] = {
+            Color = "#185E76",
+            Transparency = 0.61,
+        },
+
+        ["100"] = {
+            Color = "#06212E",
+            Transparency = 0.74,
+        },
+    }, 90),
+
+    Color3.fromHex("#FFFFFF")
+)
+
+CreateTheme(
+    "Willow Emerald",
+
+    Gradient({
+        ["0"] = "#0B593C",
+        ["50"] = "#38D79A",
+        ["100"] = "#0B593C",
+    }, 45),
+
+    Gradient({
+        ["0"] = {
+            Color = "#030907",
+            Transparency = 0.08,
+        },
+
+        ["25"] = {
+            Color = "#06160F",
+            Transparency = 0.09,
+        },
+
+        ["55"] = {
+            Color = "#0A2D20",
+            Transparency = 0.10,
+        },
+
+        ["80"] = {
+            Color = "#0B593C",
+            Transparency = 0.14,
+        },
+
+        ["100"] = {
+            Color = "#030907",
+            Transparency = 0.08,
+        },
+    }, 135),
+
+    Gradient({
+        ["0"] = {
+            Color = "#0B3E2B",
+            Transparency = 0.45,
+        },
+
+        ["50"] = {
+            Color = "#32B986",
+            Transparency = 0.22,
+        },
+
+        ["100"] = {
+            Color = "#0B4934",
+            Transparency = 0.42,
+        },
+    }, 90),
+
+    Gradient({
+        ["0"] = {
+            Color = "#06261A",
+            Transparency = 0.72,
+        },
+
+        ["50"] = {
+            Color = "#177955",
+            Transparency = 0.61,
+        },
+
+        ["100"] = {
+            Color = "#06261A",
+            Transparency = 0.74,
+        },
+    }, 90),
+
+    Color3.fromHex("#FFFFFF")
+)
+
+CreateTheme(
+    "Willow Ember",
+
+    Gradient({
+        ["0"] = "#7A2A0C",
+        ["50"] = "#E87530",
+        ["100"] = "#7A2A0C",
+    }, 45),
+
+    Gradient({
+        ["0"] = {
+            Color = "#0B0604",
+            Transparency = 0.08,
+        },
+
+        ["25"] = {
+            Color = "#1A0B06",
+            Transparency = 0.09,
+        },
+
+        ["55"] = {
+            Color = "#3A180B",
+            Transparency = 0.10,
+        },
+
+        ["80"] = {
+            Color = "#7A2A0C",
+            Transparency = 0.14,
+        },
+
+        ["100"] = {
+            Color = "#0B0604",
+            Transparency = 0.08,
+        },
+    }, 135),
+
+    Gradient({
+        ["0"] = {
+            Color = "#52200E",
+            Transparency = 0.45,
+        },
+
+        ["50"] = {
+            Color = "#CF5C25",
+            Transparency = 0.22,
+        },
+
+        ["100"] = {
+            Color = "#642810",
+            Transparency = 0.42,
+        },
+    }, 90),
+
+    Gradient({
+        ["0"] = {
+            Color = "#2C1107",
+            Transparency = 0.72,
+        },
+
+        ["50"] = {
+            Color = "#7F3514",
+            Transparency = 0.61,
+        },
+
+        ["100"] = {
+            Color = "#2C1107",
+            Transparency = 0.74,
+        },
+    }, 90),
+
+    Color3.fromHex("#FFFFFF")
+)
+
+WindUI:SetTheme(DEFAULT_THEME)
+
+local ThemeButtonColors = {
+    ["Willow Rose"] = {
+        Low = "#711E42",
+        High = "#E45B91",
+    },
+
+    ["Willow Noir"] = {
+        Low = "#101010",
+        High = "#777777",
+    },
+
+    ["Willow Crimson"] = {
+        Low = "#5C0B1C",
+        High = "#A81738",
+    },
+
+    ["Willow Midnight"] = {
+        Low = "#171B35",
+        High = "#4652A8",
+    },
+
+    ["Willow Violet"] = {
+        Low = "#4A176E",
+        High = "#A44BE2",
+    },
+
+    ["Willow Ocean"] = {
+        Low = "#0B4C67",
+        High = "#36BFEA",
+    },
+
+    ["Willow Emerald"] = {
+        Low = "#0B593C",
+        High = "#38D79A",
+    },
+
+    ["Willow Ember"] = {
+        Low = "#7A2A0C",
+        High = "#E87530",
+    },
+}
+
+local ThemeTagColors = {
+    ["Willow Rose"] = "#E45B91",
+    ["Willow Noir"] = "#666666",
+    ["Willow Crimson"] = "#A81738",
+    ["Willow Midnight"] = "#4652A8",
+    ["Willow Violet"] = "#A44BE2",
+    ["Willow Ocean"] = "#36BFEA",
+    ["Willow Emerald"] = "#38D79A",
+    ["Willow Ember"] = "#E87530",
+}
+
+local function GetOpenButtonColor(themeName)
+    local colors =
+        ThemeButtonColors[themeName]
+        or ThemeButtonColors[DEFAULT_THEME]
+
+    return ColorSequence.new(
+        Color3.fromHex(colors.Low),
+        Color3.fromHex(colors.High)
+    )
+end
+
+local function GetTagColor(themeName)
+    return Color3.fromHex(
+        ThemeTagColors[themeName]
+        or ThemeTagColors[DEFAULT_THEME]
+    )
+end
+
+local function SafeRequest(options)
+    local requestFunction =
+        (WindUI.Creator and WindUI.Creator.Request)
+        or http_request
+        or request
+        or (syn and syn.request)
+        or (fluxus and fluxus.request)
+
+    if not requestFunction then
+        return nil
+    end
+
+    local success, response =
+        pcall(function()
+            return requestFunction(options)
+        end)
+
+    if not success
+        or not response then
+        return nil
+    end
+
+    if response.StatusCode
+        and response.StatusCode ~= 200 then
+        return nil
+    end
+
+    return response
+end
+
+local function Notify(
+    title,
+    content,
+    icon,
+    duration,
+    force
+)
+    duration = duration or 4
+
+    if NotificationsSilenced
+        and not force then
+        return
+    end
+
+    if NotificationBusy
+        and not force then
+        return
+    end
+
+    NotificationBusy = true
+
+    WindUI:Notify({
+        Title = title,
+        Content = content,
+        Icon = icon or "info",
+        Duration = duration,
+    })
+
+    task.delay(
+        duration,
+        function()
+            NotificationBusy = false
+        end
+    )
+end
+
+
+_G.__CHESS_AUTOBOT = _G.__CHESS_AUTOBOT or {}
+
+local State = _G.__CHESS_AUTOBOT
+
+local TweenService = game:GetService("TweenService")
+
+State.HighlightParts = State.HighlightParts or {}
+State.HighlightSquares = State.HighlightSquares or {}
+State.HighlightDots = State.HighlightDots or {}
+State.PulseParts = State.PulseParts or {}
+State.PulseToken = (State.PulseToken or 0) + 1
+State.RippleToken = (State.RippleToken or 0) + 1
+State.RippleObjects = State.RippleObjects or {}
+State.SquareGuiCache = State.SquareGuiCache or {}
+State.OverlayBoard = State.OverlayBoard or nil
+State.OverlayClock = 0
+State.BoardSignature = nil
+State.BoardOrientation = State.BoardOrientation or nil
+
+if State.Destroy then
+
+    pcall(State.Destroy)
+
+end
+
+
+State.Enabled = true
+State.AutoPlay = false
+State.AutoAnalyze = true
+State.ReadAccepted = false
+State.ReadWarningGui = nil
+State.HighlightBestMove = true
+State.ShowEvaluation = true
+State.ShowBoardOverlay = true
+State.ShowLastMove = true
+State.ShowFEN = false
+State.SecondChoices = false
+State.SecondChoiceCount = 4
+State.SmartAnalysis = true
+State.SmartMargin = 0.30
+State.NovaPersonalityEnabled = true
+State.NovaReaction = nil
+State.NovaNoticeToken = 0
+State.AmIBanned = false
+State.AmIBannedGui = nil
+State.AmIBannedToken = 0
+State.AIStyle = "Balanced"
+
+State.AIStyles = {
+    Balanced = {
+        Description = "Strong AI play with minimal personality bias.",
+        Margin = 0.30,
+        MaxEngineGiveback = 0.00,
+        CandidateBonus = 0.00,
+        Aggression = 0.00,
+        Calmness = 0.00,
+        Trickiness = 0.00,
+        Tactical = 0.00,
+        Positional = 0.00,
+        Endgame = 0.00,
+        ThinkMultiplier = 1.00,
+        StyleStrength = 0.00,
+        From = Color3.fromRGB(255, 202, 64),
+        To = Color3.fromRGB(68, 220, 145),
+        FromGlow = Color3.fromRGB(255, 235, 145),
+        ToGlow = Color3.fromRGB(155, 255, 205),
+    },
+    Aggressive = {
+        Description = "Prefers forcing, active and tactical play while staying AI-verified.",
+        Margin = 0.08,
+        MaxEngineGiveback = 0.65,
+        CandidateBonus = 0.55,
+        Aggression = 1.25,
+        Calmness = -0.15,
+        Trickiness = 0.15,
+        Tactical = 0.75,
+        Positional = 0.10,
+        Endgame = 0.10,
+        ThinkMultiplier = 1.08,
+        StyleStrength = 4.50,
+        From = Color3.fromRGB(255, 88, 72),
+        To = Color3.fromRGB(255, 180, 62),
+        FromGlow = Color3.fromRGB(255, 140, 110),
+        ToGlow = Color3.fromRGB(255, 220, 120),
+    },
+    Calm = {
+        Description = "Prefers stable positions, king safety and lower-volatility choices.",
+        Margin = 0.10,
+        MaxEngineGiveback = 0.26,
+        CandidateBonus = 0.20,
+        Aggression = -0.25,
+        Calmness = 1.00,
+        Trickiness = -0.10,
+        Tactical = -0.10,
+        Positional = 0.55,
+        Endgame = 0.25,
+        ThinkMultiplier = 1.03,
+        StyleStrength = 3.20,
+        From = Color3.fromRGB(78, 196, 255),
+        To = Color3.fromRGB(105, 255, 214),
+        FromGlow = Color3.fromRGB(150, 225, 255),
+        ToGlow = Color3.fromRGB(170, 255, 235),
+    },
+    Defensive = {
+        Description = "Prioritizes king safety, solidity and avoiding unnecessary risk.",
+        Margin = 0.12,
+        MaxEngineGiveback = 0.20,
+        CandidateBonus = 0.12,
+        Aggression = -0.45,
+        Calmness = 1.15,
+        Trickiness = -0.20,
+        Tactical = -0.15,
+        Positional = 0.70,
+        Endgame = 0.35,
+        ThinkMultiplier = 1.05,
+        StyleStrength = 3.50,
+        From = Color3.fromRGB(74, 122, 255),
+        To = Color3.fromRGB(85, 224, 190),
+        FromGlow = Color3.fromRGB(150, 185, 255),
+        ToGlow = Color3.fromRGB(160, 255, 225),
+    },
+    Tactical = {
+        Description = "Looks for forcing moves, captures, promotions and tactical chances.",
+        Margin = 0.07,
+        MaxEngineGiveback = 0.78,
+        CandidateBonus = 0.75,
+        Aggression = 1.05,
+        Calmness = -0.10,
+        Trickiness = 0.35,
+        Tactical = 1.20,
+        Positional = 0.15,
+        Endgame = 0.10,
+        ThinkMultiplier = 1.10,
+        StyleStrength = 5.00,
+        From = Color3.fromRGB(193, 92, 255),
+        To = Color3.fromRGB(255, 92, 178),
+        FromGlow = Color3.fromRGB(220, 155, 255),
+        ToGlow = Color3.fromRGB(255, 175, 220),
+    },
+    Trickery = {
+        Description = "Prefers less obvious AI-approved ideas, traps and deceptive alternatives.",
+        Margin = 0.06,
+        MaxEngineGiveback = 0.90,
+        CandidateBonus = 0.65,
+        Aggression = 0.55,
+        Calmness = 0.05,
+        Trickiness = 1.20,
+        Tactical = 0.85,
+        Positional = 0.20,
+        Endgame = 0.05,
+        ThinkMultiplier = 1.12,
+        StyleStrength = 5.00,
+        From = Color3.fromRGB(255, 205, 70),
+        To = Color3.fromRGB(174, 104, 255),
+        FromGlow = Color3.fromRGB(255, 235, 130),
+        ToGlow = Color3.fromRGB(215, 165, 255),
+    },
+    Positional = {
+        Description = "Favors space, center control, development and long-term structure.",
+        Margin = 0.10,
+        MaxEngineGiveback = 0.38,
+        CandidateBonus = 0.28,
+        Aggression = 0.02,
+        Calmness = 0.65,
+        Trickiness = 0.00,
+        Tactical = 0.00,
+        Positional = 1.15,
+        Endgame = 0.25,
+        ThinkMultiplier = 1.06,
+        StyleStrength = 3.80,
+        From = Color3.fromRGB(62, 210, 135),
+        To = Color3.fromRGB(90, 150, 255),
+        FromGlow = Color3.fromRGB(140, 255, 190),
+        ToGlow = Color3.fromRGB(165, 205, 255),
+    },
+    Endgame = {
+        Description = "Favors king activity, pawn progress and practical endgame choices when appropriate.",
+        Margin = 0.09,
+        MaxEngineGiveback = 0.48,
+        CandidateBonus = 0.32,
+        Aggression = 0.18,
+        Calmness = 0.55,
+        Trickiness = 0.05,
+        Tactical = 0.35,
+        Positional = 0.55,
+        Endgame = 1.25,
+        ThinkMultiplier = 1.07,
+        StyleStrength = 3.80,
+        From = Color3.fromRGB(255, 171, 58),
+        To = Color3.fromRGB(74, 214, 180),
+        FromGlow = Color3.fromRGB(255, 215, 120),
+        ToGlow = Color3.fromRGB(155, 255, 225),
+    },
+    ["Alien Gambit"] = {
+        Description = "Plays the Alien Gambit ideas for White: Caro-Kann pressure, Ng5 and the Nxf7 king-exposure sacrifice when the position matches.",
+        Margin = 0.04,
+        MaxEngineGiveback = 1.15,
+        CandidateBonus = 1.35,
+        Aggression = 1.45,
+        Calmness = -0.25,
+        Trickiness = 1.45,
+        Tactical = 1.35,
+        Positional = 0.05,
+        Endgame = 0.00,
+        ThinkMultiplier = 1.12,
+        StyleStrength = 5.50,
+        AlienGambit = true,
+        From = Color3.fromRGB(120, 255, 142),
+        To = Color3.fromRGB(156, 92, 255),
+        FromGlow = Color3.fromRGB(190, 255, 175),
+        ToGlow = Color3.fromRGB(218, 175, 255),
+    },
+    ["experiment"] = {
+        Description = "High-depth AI that hunts unusual but sound moves, compares deep alternatives and keeps a strict tactical safety floor.",
+        Margin = 0.035,
+        MaxEngineGiveback = 1.00,
+        CandidateBonus = 1.25,
+        Aggression = 1.20,
+        Calmness = 0.20,
+        Trickiness = 2.20,
+        Tactical = 1.55,
+        Positional = 0.70,
+        Endgame = 0.65,
+        ThinkMultiplier = 1.65,
+        StyleStrength = 6.80,
+        WillyAlien = true,
+        From = Color3.fromRGB(109, 255, 238),
+        To = Color3.fromRGB(193, 110, 255),
+        FromGlow = Color3.fromRGB(170, 255, 247),
+        ToGlow = Color3.fromRGB(226, 175, 255),
+    },
+}
+
+if not State.AIStyles[State.AIStyle] then
+    State.AIStyle = "Balanced"
+end
+
+local function getAIProfile()
+    return State.AIStyles[State.AIStyle] or State.AIStyles.Balanced
+end
+
+local function getAIHighlightColors()
+    local profile = getAIProfile()
+    return profile.From, profile.To, profile.FromGlow, profile.ToGlow
+end
+
+local function setAIStyle(style)
+    if type(style) ~= "string" or not State.AIStyles[style] then
+        return false
+    end
+
+    State.AIStyle = style
+    State.BoardSignature = nil
+    State.PulseToken += 1
+    State.RippleToken += 1
+    State.AnalysisToken += 1
+    State.Running = false
+    State.BestMove = nil
+    State.BestScore = nil
+    State.SecondChoiceMove = nil
+    State.SecondChoiceReply = nil
+    State.SecondChoiceScore = nil
+    State.SecondChoiceLines = {}
+
+    if State.FEN then
+        State.TryMove(true)
+    else
+        refreshBoardOverlay()
+    end
+
+    return true
+end
+
+State.SecondChoiceMove = nil
+State.SecondChoiceReply = nil
+State.SecondChoiceScore = nil
+State.SecondChoiceLines = {}
+
+State.GameID = nil
+
+State.FEN = nil
+
+State.WhiteName = nil
+
+State.BlackName = nil
+State.WhitePlayerData = nil
+State.BlackPlayerData = nil
+State.LocalSideOverride = nil
+
+State.Running = false
+
+State.SearchTime = 2.5
+
+State.MoveNumber = 0
+
+State.LastMove = nil
+
+State.LastSentFEN = nil
+
+State.BestMove = nil
+
+State.BestScore = nil
+
+State.AnalysisToken = 0
+
+State.Conns = {}
+
+State.GameConns = {}
+
+State.Gui = nil
+
+State.Overlay = nil
+
+State.BoardConn = nil
+
+local function disconnectList(list)
+
+    for _, c in pairs(list) do
+
+        if c and c.Connected then
+
+            pcall(function()
+
+                c:Disconnect()
+
+            end)
+
+        end
+
+    end
+
+    table.clear(list)
+
+end
+
+local function getChessRemotes()
+
+    local ok, result = pcall(function()
+
+        return require(ReplicatedStorage.Modules.Remotes.ChessRemotes)
+
+    end)
+
+    if not ok then
+
+        return nil
+
+    end
+
+    return result
+
+end
+
+local function findDescendant(root, name)
+
+    local ok, result = pcall(function()
+
+        return root:FindFirstChild(name, true)
+
+    end)
+
+    if ok then
+
+        return result
+
+    end
+
+    return nil
+
+end
+
+local function getLocalZyrqon()
+
+    local names = {"GarboChess", "GarboChessQueen"}
+
+    local root = LocalPlayer:FindFirstChildOfClass("PlayerScripts")
+
+    if root then
+        for _, engineName in ipairs(names) do
+            local engine = findDescendant(root, engineName)
+            if engine and engine:IsA("ModuleScript") then
+                local ok, module = pcall(require, engine)
+                if ok and type(module) == "table" and module.GetBestMoveFromFEN then
+                    return module
+                end
+            end
+        end
+    end
+
+    local starter = game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts")
+
+    if starter then
+        for _, engineName in ipairs(names) do
+            local engine = findDescendant(starter, engineName)
+            if engine and engine:IsA("ModuleScript") then
+                local ok, module = pcall(require, engine)
+                if ok and type(module) == "table" and module.GetBestMoveFromFEN then
+                    return module
+                end
+            end
+        end
+    end
+
+    return nil
+
+end
+
+local function loadExternalAPI(url)
+
+    if type(url) ~= "string" or url == "" or url == "PASTE_RAW_GITHUB_URL_HERE" then
+        return nil, "Failed to Connect to api"
+    end
+
+    local okHttp, source = pcall(function()
+        return game:HttpGet(url)
+    end)
+
+    if not okHttp or type(source) ~= "string" or source == "" then
+        return nil, "Failed to Connect to api"
+    end
+
+    local compiler = loadstring
+    if type(compiler) ~= "function" then
+        return nil, "Failed to Connect to api"
+    end
+
+    local okChunk, chunk = pcall(compiler, source)
+    if not okChunk or type(chunk) ~= "function" then
+        return nil, "Failed to Connect to api"
+    end
+
+    local okAPI, api = pcall(chunk)
+    if not okAPI or type(api) ~= "table" or type(api.GetBestMoveFromFEN) ~= "function" then
+        return nil, "Failed to Connect to api"
+    end
+
+    return api
+
+end
+
+local LocalZyrqon = getLocalZyrqon()
+local ActiveAPI = LocalZyrqon
+local ActiveAPIName = LocalZyrqon and "Zyrqon" or "Unavailable"
+State.APIName = State.APIName or "Zyrqon"
+
+local function setActiveAPI(name, silent)
+
+    name = tostring(name or "Zyrqon")
+
+    if name == "Zyrqon" then
+        if not LocalZyrqon then
+            ActiveAPI = nil
+            ActiveAPIName = "Unavailable"
+            if not silent then
+                pcall(Notify, "Zyrqon API", "Local baseline API was not found.", "alert-triangle", 4, true)
+            end
+            return false
+        end
+
+        ActiveAPI = LocalZyrqon
+        ActiveAPIName = "Zyrqon"
+        pcall(function()
+            if ActiveAPI and ActiveAPI.SetStyle then
+                ActiveAPI:SetStyle(State.AIStyle or "Balanced")
+            end
+        end)
+        return true
+    end
+
+    if name == "Zyrqon Nova" then
+        local api, err = loadExternalAPI(API_URLS["Zyrqon Nova"])
+        if not api then
+            if not silent then
+                pcall(Notify, "Zyrqon Nova", tostring(err or "API load failed"), "alert-triangle", 5, true)
+            end
+            return false
+        end
+
+        ActiveAPI = api
+        ActiveAPIName = "Zyrqon Nova"
+        pcall(function()
+            if ActiveAPI and ActiveAPI.SetStyle then
+                ActiveAPI:SetStyle(State.AIStyle or "Balanced")
+            end
+        end)
+        return true
+    end
+
+    if name == "Lith" then
+        local api, err = loadExternalAPI(API_URLS["Lith"])
+        if not api then
+            if not silent then
+                pcall(Notify, "Lith", tostring(err or "API load failed"), "alert-triangle", 5, true)
+            end
+            return false
+        end
+
+        ActiveAPI = api
+        ActiveAPIName = "Lith"
+        pcall(function()
+            if ActiveAPI and ActiveAPI.SetStyle then
+                ActiveAPI:SetStyle("Balanced")
+            end
+        end)
+        return true
+    end
+
+    if name == "Null.Mini" then
+        local api, err = loadExternalAPI(API_URLS["Null.Mini"])
+        if not api then
+            if not silent then
+                pcall(Notify, "Null.Mini", tostring(err or "API load failed"), "alert-triangle", 5, true)
+            end
+            return false
+        end
+
+        ActiveAPI = api
+        ActiveAPIName = "Null.Mini"
+        pcall(function()
+            if ActiveAPI and ActiveAPI.SetStyle then
+                ActiveAPI:SetStyle(State.AIStyle or "Balanced")
+            end
+        end)
+        return true
+    end
+
+    if name == "Muse" then
+        local api, err = loadExternalAPI(API_URLS["Muse"])
+        if not api then
+            if not silent then
+                pcall(Notify, "Muse", tostring(err or "API load failed"), "alert-triangle", 5, true)
+            end
+            return false
+        end
+
+        ActiveAPI = api
+        ActiveAPIName = "Muse"
+        pcall(function()
+            if ActiveAPI and ActiveAPI.SetStyle then
+                ActiveAPI:SetStyle(State.AIStyle or "Balanced")
+            end
+        end)
+        return true
+    end
+    return false
+end
+
+setActiveAPI(State.APIName, true)
+local function fallbackMove(fen)
+    local ok, logic = pcall(function()
+        return require(ReplicatedStorage.Modules.GameLogic.ChessClassic)
+    end)
+    if not ok or type(logic) ~= "table" or not logic.GetAllLegalMoves then
+        return nil
+    end
+    local okMoves, moves = pcall(function()
+        return logic:GetAllLegalMoves(fen)
+    end)
+    if not okMoves or type(moves) ~= "table" or #moves == 0 then
+        return nil
+    end
+    table.sort(moves, function(a, b)
+        return tostring(a) < tostring(b)
+    end)
+    return moves[1]
+end
+local function getChessLogic()
+    local ok, logic = pcall(function()
+        return require(ReplicatedStorage.Modules.GameLogic.ChessClassic)
+    end)
+    if ok and type(logic) == "table" then
+        return logic
+    end
+    return nil
+end
+
+local function boardToMatrix(fen)
+    local board = string.match(fen or "", "^(%S+)")
+    if not board then
+        return nil
+    end
+
+    local matrix = {}
+    for rank = 1, 8 do
+        matrix[rank] = {}
+        for file = 1, 8 do
+            matrix[rank][file] = "."
+        end
+    end
+
+    local rank = 8
+    local file = 1
+    for token in board:gmatch("[1-8KQRBNPkqrbnp]") do
+        local empty = tonumber(token)
+        if empty then
+            file += empty
+        else
+            if rank < 1 or file > 8 then
+                return nil
+            end
+            matrix[rank][file] = token
+            file += 1
+        end
+        if file > 8 then
+            rank -= 1
+            file = 1
+        end
+    end
+
+    if rank ~= 1 or file ~= 1 then
+        return nil
+    end
+    return matrix
+end
+local function squareToCoords(square)
+    local file = string.byte(square, 1) - string.byte("a") + 1
+    local rank = tonumber(square:sub(2))
+    if file < 1 or file > 8 or not rank or rank < 1 or rank > 8 then
+        return nil
+    end
+    return file, rank
+end
+local function coordsToSquare(file, rank)
+    if file < 1 or file > 8 or rank < 1 or rank > 8 then
+        return nil
+    end
+    return string.char(string.byte("a") + file - 1) .. tostring(rank)
+end
+
+local function serializeBoard(matrix)
+    local rows = {}
+    for rank = 8, 1, -1 do
+        local row = ""
+        local empty = 0
+        for file = 1, 8 do
+            local piece = matrix[rank][file]
+            if piece == "." then
+                empty += 1
+            else
+                if empty > 0 then
+                    row ..= tostring(empty)
+                    empty = 0
+                end
+                row ..= piece
+            end
+        end
+        if empty > 0 then
+            row ..= tostring(empty)
+        end
+        rows[#rows + 1] = row
+    end
+    return table.concat(rows, "/")
+end
+
+local function applyUCIMove(fen, move)
+    if type(fen) ~= "string" or type(move) ~= "string" then
+        return nil
+    end
+    local from, to, promo = move:match("^([a-h][1-8])([a-h][1-8])([qrbn]?)$")
+    if not from or not to then
+        return nil
+    end
+    local fields = {}
+    for part in fen:gmatch("%S+") do
+        fields[#fields + 1] = part
+    end
+    if #fields < 4 then
+        return nil
+    end
+    local active = fields[2] == "b" and "b" or "w"
+    local castling = fields[3] or "-"
+    local ep = fields[4] or "-"
+    local halfmove = tonumber(fields[5]) or 0
+    local fullmove = tonumber(fields[6]) or 1
+
+    local matrix = boardToMatrix(fen)
+    if not matrix then
+        return nil
+    end
+
+    local ff, fr = squareToCoords(from)
+    local tf, tr = squareToCoords(to)
+    if not ff or not tf then
+        return nil
+    end
+
+    local piece = matrix[fr][ff]
+    if piece == "." then
+        return nil
+    end
+
+    local destination = matrix[tr][tf]
+    local isWhite = piece:match("%u") ~= nil
+    local isPawn = piece:lower() == "p"
+    local isKing = piece:lower() == "k"
+    local isRook = piece:lower() == "r"
+    local isCapture = destination ~= "."
+
+    if isPawn and destination == "." and ff ~= tf and ep ~= "-" and ep == to then
+        local capturedRank = isWhite and (tr - 1) or (tr + 1)
+        if capturedRank >= 1 and capturedRank <= 8 and matrix[capturedRank][tf] ~= "." then
+            matrix[capturedRank][tf] = "."
+            isCapture = true
+        end
+    end
+
+    matrix[fr][ff] = "."
+    matrix[tr][tf] = piece
+
+    if isKing and math.abs(tf - ff) == 2 then
+        if tf > ff then
+            matrix[fr][8] = "."
+            matrix[fr][6] = isWhite and "R" or "r"
+        else
+            matrix[fr][1] = "."
+            matrix[fr][4] = isWhite and "R" or "r"
+        end
+    end
+
+    if isPawn and tr == (isWhite and 8 or 1) and promo ~= "" then
+        matrix[tr][tf] = isWhite and promo:upper() or promo:lower()
+    end
+
+    local rights = castling == "-" and "" or castling
+    local function removeRight(ch)
+        rights = rights:gsub(ch, "")
+    end
+
+    if isKing then
+        if isWhite then
+            removeRight("K")
+            removeRight("Q")
+        else
+            removeRight("k")
+            removeRight("q")
+        end
+    end
+
+    if isRook then
+        if from == "a1" then removeRight("Q") end
+        if from == "h1" then removeRight("K") end
+        if from == "a8" then removeRight("q") end
+        if from == "h8" then removeRight("k") end
+    end
+
+    if destination == "R" and to == "a1" then removeRight("Q") end
+    if destination == "R" and to == "h1" then removeRight("K") end
+    if destination == "r" and to == "a8" then removeRight("q") end
+    if destination == "r" and to == "h8" then removeRight("k") end
+
+    local newEp = "-"
+    if isPawn and math.abs(tr - fr) == 2 then
+        newEp = coordsToSquare(ff, (tr + fr) // 2) or "-"
+    end
+
+    if isPawn or isCapture then
+        halfmove = 0
+    else
+        halfmove += 1
+    end
+
+    if active == "b" then
+        fullmove += 1
+    end
+
+    local nextActive = active == "w" and "b" or "w"
+    if rights == "" then
+        rights = "-"
+    end
+
+    return serializeBoard(matrix)
+        .. " " .. nextActive
+        .. " " .. rights
+        .. " " .. newEp
+        .. " " .. tostring(halfmove)
+        .. " " .. tostring(fullmove)
+
+end
+
+local pieceValues = {
+    p = 1,
+    n = 3.2,
+    b = 3.3,
+    r = 5,
+    q = 9,
+    k = 0,
+}
+
+local function materialDetails(fen)
+
+    local matrix = boardToMatrix(fen)
+    if not matrix then
+        return nil
+    end
+
+    local white = {p = 0, n = 0, b = 0, r = 0, q = 0, k = 0}
+    local black = {p = 0, n = 0, b = 0, r = 0, q = 0, k = 0}
+    local whiteScore = 0
+    local blackScore = 0
+
+    for rank = 1, 8 do
+        for file = 1, 8 do
+            local piece = matrix[rank][file]
+            local lower = piece:lower()
+            if piece ~= "." and pieceValues[lower] then
+                if piece:match("%u") then
+                    white[lower] += 1
+                    whiteScore += pieceValues[lower]
+                else
+                    black[lower] += 1
+                    blackScore += pieceValues[lower]
+                end
+            end
+        end
+    end
+
+    return {
+        white = white,
+        black = black,
+        whiteScore = whiteScore,
+        blackScore = blackScore,
+        balance = whiteScore - blackScore,
+    }
+
+end
+
+local function piecesText(counts)
+
+    if not counts then
+        return "Unknown"
+    end
+
+    local order = {"q", "r", "b", "n", "p"}
+    local names = {q = "Queen", r = "Rook", b = "Bishop", n = "Knight", p = "Pawn"}
+    local parts = {}
+
+    for _, key in ipairs(order) do
+        local count = counts[key] or 0
+        if count > 0 then
+            parts[#parts + 1] = tostring(count) .. "× " .. names[key]
+        end
+    end
+
+    return #parts > 0 and table.concat(parts, " • ") or "No pieces"
+
+end
+
+local function engineScoreToWinrates(score)
+
+    local value = tonumber(score)
+    if not value then
+        return nil, nil, nil
+    end
+
+    if math.abs(value) > 25 then
+        value /= 100
+    end
+
+    value = math.clamp(value, -8, 8)
+    local base = 1 / (1 + math.exp(-1.15 * value))
+    local draw = math.clamp(0.16 * math.exp(-math.abs(value) * 0.7), 0.025, 0.16)
+    local decisive = 1 - draw
+    local mine = base * decisive
+    local opponent = (1 - base) * decisive
+
+    return mine * 100, opponent * 100, draw * 100
+
+end
+
+local function getPlayerDisplay(ref, fallback)
+
+    if typeof(ref) == "Instance" and ref:IsA("Player") then
+        return ref.DisplayName ~= "" and ref.DisplayName or ref.Name
+    end
+
+    if type(ref) == "table" then
+        local name = ref.DisplayName or ref.displayName or ref.Name or ref.name or ref.Username or ref.username
+        if name then
+            return tostring(name)
+        end
+    end
+
+    if ref ~= nil then
+        return tostring(ref)
+    end
+
+    return fallback or "Unknown"
+
+end
+
+local localSide
+local activeColor
+
+local function normalizeEngineScore(value)
+
+    local n = tonumber(value)
+    if not n then
+        return nil
+    end
+
+    if math.abs(n) > 25 then
+        n /= 100
+    end
+
+    return n
+
+end
+
+local function extractMove(raw)
+
+    if type(raw) == "string" then
+        return raw
+    end
+
+    if type(raw) == "table" then
+        return raw.UCI or raw.uci or raw.Move or raw.move
+    end
+
+    return nil
+
+end
+
+local function getLegalMoves(fen)
+
+    local logic = getChessLogic()
+    if not logic or not logic.GetAllLegalMoves then
+        return {}
+    end
+
+    local ok, moves = pcall(function()
+        return logic:GetAllLegalMoves(fen)
+    end)
+
+    if not ok or type(moves) ~= "table" then
+        return {}
+    end
+
+    local result = {}
+    local seen = {}
+
+    for _, raw in ipairs(moves) do
+        local move = extractMove(raw)
+        if type(move) == "string" and move:match("^[a-h][1-8][a-h][1-8][qrbn]?$") and not seen[move] then
+            seen[move] = true
+            result[#result + 1] = move
+        end
+    end
+
+    return result
+
+end
+
+local ALIEN_START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+local AlienGambitBook = {}
+
+local function alienFenKey(fen)
+    if type(fen) ~= "string" then
+        return nil
+    end
+
+    local fields = {}
+    for field in fen:gmatch("%S+") do
+        fields[#fields + 1] = field
+        if #fields >= 4 then
+            break
+        end
+    end
+
+    if #fields < 2 then
+        return nil
+    end
+
+    return table.concat(fields, " ")
+end
+
+local function addAlienBookLine(line)
+    local fen = ALIEN_START_FEN
+
+    for _, move in ipairs(line) do
+        local key = alienFenKey(fen)
+        if key then
+            AlienGambitBook[key] = move
+        end
+
+        local nextFen = applyUCIMove(fen, move)
+        if not nextFen then
+            break
+        end
+
+        fen = nextFen
+    end
+end
+
+addAlienBookLine({
+    "e2e4", "c7c6", "d2d4", "d7d5", "b1c3", "d5e4",
+    "c3e4", "g8f6", "e4g5", "h7h6", "g5f7",
+})
+
+addAlienBookLine({
+    "e2e4", "c7c6", "d2d4", "d7d5", "b1d2", "d5e4",
+    "d2e4", "g8f6", "e4g5", "h7h6", "g5f7",
+})
+
+addAlienBookLine({
+    "e2e4", "c7c6", "b1c3", "d7d5", "d2d4", "d5e4",
+    "c3e4", "g8f6", "e4g5", "h7h6", "g5f7",
+})
+
+local function getAlienGambitBookMove(fen)
+    if getAIProfile and getAIProfile().AlienGambit ~= true then
+        return nil
+    end
+
+    local side = string.match(fen or "", "^%S+ (%S+)")
+    if side ~= "w" then
+        return nil
+    end
+
+    local key = alienFenKey(fen)
+    local move = key and AlienGambitBook[key] or nil
+
+    if move then
+        local legal = getLegalMoves(fen)
+        for _, candidate in ipairs(legal) do
+            if candidate == move then
+                return move
+            end
+        end
+    end
+
+    return nil
+end
+
+local function getLegalAlienMove(fen, preferredMoves)
+    if type(preferredMoves) ~= "table" then
+        return nil
+    end
+
+    local legal = getLegalMoves(fen)
+    if #legal == 0 then
+        return nil
+    end
+
+    local allowed = {}
+    for _, move in ipairs(legal) do
+        allowed[move] = true
+    end
+
+    for _, move in ipairs(preferredMoves) do
+        if allowed[move] then
+            return move
+        end
+    end
+
+    return nil
+end
+
+local function alienBoardShape(fen)
+    local m = boardToMatrix(fen)
+    if not m then
+        return nil
+    end
+
+    return m
+end
+
+local function getAlienGambitPlanMove(fen)
+    local profile = getAIProfile()
+    if not profile or profile.AlienGambit ~= true then
+        return nil
+    end
+
+    if string.match(fen or "", "^%S+ w ") == nil then
+        return nil
+    end
+
+    local book = getAlienGambitBookMove(fen)
+    if book then
+        return book
+    end
+
+    local m = alienBoardShape(fen)
+    if not m then
+        return nil
+    end
+
+    if m[2][5] == "P" and m[1][1] == "R" and m[1][4] == "Q"
+        and m[1][5] == "K" and m[1][6] == "B" and m[1][7] == "N" then
+        local move = getLegalAlienMove(fen, {"e2e4"})
+        if move then
+            return move
+        end
+    end
+
+    if m[7][3] == "p" and m[4][5] == "P" and m[7][4] == "P" then
+        local move = getLegalAlienMove(fen, {"d2d4"})
+        if move then
+            return move
+        end
+    end
+
+    if m[4][5] == "P" and m[4][4] == "P" and m[5][4] == "p"
+        and m[1][2] == "N" then
+        local move = getLegalAlienMove(fen, {"b1c3", "b1d2"})
+        if move then
+            return move
+        end
+    end
+
+    if m[4][5] == "p" then
+        local move = getLegalAlienMove(fen, {"c3e4", "d2e4"})
+        if move then
+            return move
+        end
+    end
+
+    if m[4][5] == "N" and m[6][6] == "n" then
+        local move = getLegalAlienMove(fen, {"e4g5"})
+        if move then
+            return move
+        end
+    end
+
+    if m[5][7] == "N" and m[6][8] == "p" and m[7][6] == "p" then
+        local move = getLegalAlienMove(fen, {"g5f7"})
+        if move then
+            return move
+        end
+    end
+
+    if m[7][6] == "k" and m[1][7] == "N" then
+        local move = getLegalAlienMove(fen, {"g1f3"})
+        if move then
+            return move
+        end
+    end
+
+    if m[7][6] == "k" and m[3][6] == "N" and m[1][6] == "B" then
+        local move = getLegalAlienMove(fen, {"f1c4"})
+        if move then
+            return move
+        end
+    end
+
+    if m[7][6] == "k" and m[4][7] == "b" and m[3][6] == "N" then
+        local move = getLegalAlienMove(fen, {"f3e5"})
+        if move then
+            return move
+        end
+    end
+
+    return nil
+end
+
+local function alienPatternBias(fen, move)
+    local matrix = boardToMatrix(fen)
+    if not matrix or type(move) ~= "string" then
+        return 0
+    end
+
+    local profile = getAIProfile()
+    if profile.AlienGambit ~= true then
+        return 0
+    end
+
+    local from, to = move:sub(1, 2), move:sub(3, 4)
+    local ff, fr = squareToCoords(from)
+    local tf, tr = squareToCoords(to)
+    if not ff or not tf then
+        return 0
+    end
+
+    local piece = matrix[fr][ff]
+    local target = matrix[tr][tf]
+    local lower = piece and piece:lower() or ""
+    local targetLower = target and target ~= "." and target:lower() or nil
+    local bias = 0
+
+    local bookMove = getAlienGambitBookMove(fen)
+    if bookMove == move then
+        bias += 2.25
+    end
+
+    if lower == "n" and to == "g5" then
+        bias += 0.72
+    end
+
+    if lower == "n" and from == "g5" and to == "f7" then
+        bias += 1.85
+        if targetLower == "p" then
+            bias += 0.55
+        end
+    end
+
+    if lower == "n" and from == "g1" and to == "f3" then
+        bias += 0.52
+    end
+
+    if lower == "b" and from == "f1" and to == "c4" then
+        bias += 0.42
+    end
+
+    if lower == "q" and from == "d1" and to == "e2" then
+        bias += 0.24
+    end
+
+    if move:sub(5, 5) ~= "" then
+        bias += 0.18
+    end
+
+    if targetLower and (targetLower == "p" or targetLower == "b") and lower ~= "q" then
+        bias += 0.12
+    end
+
+    return bias
+end
+
+local function moveHeuristic(fen, move, matrix)
+
+    if type(move) ~= "string" then
+        return -math.huge
+    end
+
+    local from, to = move:sub(1, 2), move:sub(3, 4)
+    local ff, fr = squareToCoords(from)
+    local tf, tr = squareToCoords(to)
+
+    if not ff or not tf or not matrix then
+        return 0
+    end
+
+    local moving = matrix[fr][ff]
+    local target = matrix[tr][tf]
+    local movingLower = moving and moving:lower() or ""
+    local targetLower = target and target ~= "." and target:lower() or nil
+    local score = 0
+
+    if targetLower then
+        local victim = pieceValues[targetLower] or 0
+        local attacker = pieceValues[movingLower] or 1
+        score += victim * 14
+        score += math.max(0, victim - attacker) * 4
+    end
+
+    if move:sub(5, 5) ~= "" then
+        score += 48
+    end
+
+    if (from == "e1" and (to == "g1" or to == "c1")) or (from == "e8" and (to == "g8" or to == "c8")) then
+        score += 10
+    end
+
+    local centerDistance = math.abs(4.5 - tf) + math.abs(4.5 - tr)
+    score += math.max(0, 5 - centerDistance) * 1.8
+
+    local profile = getAIProfile()
+
+    if movingLower == "n" or movingLower == "b" then
+        score += 2.5
+        if (fr == 1 or fr == 8) and not targetLower then
+            score += 4
+        end
+    elseif movingLower == "p" then
+        local advance = math.abs(tr - fr)
+        score += advance * (0.8 + profile.Aggression * 0.35 + profile.Endgame * 0.25)
+    elseif movingLower == "r" then
+        score += 1.5
+    elseif movingLower == "q" then
+        score -= 1.5 + math.max(0, profile.Calmness * 0.9)
+    elseif movingLower == "k" and math.abs(tf - ff) ~= 2 then
+        score -= 5 + math.max(0, profile.Aggression * 0.5)
+    end
+
+    if targetLower then
+        score += profile.Aggression * (pieceValues[targetLower] or 0) * 2.2
+        score += profile.Tactical * (pieceValues[targetLower] or 0) * 1.8
+    end
+
+    if move:sub(5, 5) ~= "" then
+        score += profile.Aggression * 10 + profile.Tactical * 15 + profile.Endgame * 8
+    end
+
+    if (from == "e1" and (to == "g1" or to == "c1")) or (from == "e8" and (to == "g8" or to == "c8")) then
+        score += profile.Calmness * 10 + profile.Positional * 7 + profile.Endgame * 3
+    end
+
+    local centerBonus = math.max(0, 5 - centerDistance)
+    score += centerBonus * (profile.Positional * 2.0 + profile.Calmness * 0.45)
+
+    if movingLower ~= "q" and movingLower ~= "k" and not targetLower then
+        score += profile.Trickiness * 2.3
+    end
+
+    return score
+
+end
+
+local function styleCandidatePriority(fen, move, matrix)
+    if type(move) ~= "string" or not matrix then
+        return -math.huge
+    end
+
+    local base = moveHeuristic(fen, move, matrix)
+    local from, to = move:sub(1, 2), move:sub(3, 4)
+    local ff, fr = squareToCoords(from)
+    local tf, tr = squareToCoords(to)
+    if not ff or not tf then
+        return base
+    end
+
+    local piece = matrix[fr][ff]
+    local target = matrix[tr][tf]
+    local lower = piece and piece:lower() or ""
+    local targetLower = target and target ~= "." and target:lower() or nil
+    local score = base
+    local captureValue = targetLower and (pieceValues[targetLower] or 0) or 0
+    local center = math.max(0, 4.5 - (math.abs(4.5 - tf) + math.abs(4.5 - tr)))
+    local isCastle = (from == "e1" and (to == "g1" or to == "c1"))
+        or (from == "e8" and (to == "g8" or to == "c8"))
+    local isPromo = move:sub(5, 5) ~= ""
+    local flank = (tf == 1 or tf == 8)
+    local quiet = not targetLower
+
+    if State.AIStyle == "Balanced" then
+        return score
+    elseif State.AIStyle == "Aggressive" then
+        score += captureValue * 12
+        score += (isPromo and 38 or 0)
+        score += (lower == "q" and quiet and 7 or 0)
+        score += ((tf >= 6 or tf <= 3) and (tr >= 5 or tr <= 4) and 4 or 0)
+        score += (lower == "p" and math.abs(tr - fr) * 3.5 or 0)
+    elseif State.AIStyle == "Calm" then
+        score += isCastle and 46 or 0
+        score += quiet and 12 or 0
+        score += (lower == "n" or lower == "b") and 14 or 0
+        score += center * 5
+        score -= captureValue * 4
+        score -= isPromo and 8 or 0
+    elseif State.AIStyle == "Defensive" then
+        score += isCastle and 58 or 0
+        score += (lower == "k" and not isCastle and -25 or 0)
+        score += quiet and 15 or 0
+        score += (lower == "n" or lower == "b") and 9 or 0
+        score -= captureValue > 3 and 5 or 0
+        score -= flank and 4 or 0
+    elseif State.AIStyle == "Tactical" then
+        score += captureValue * 16
+        score += (isPromo and 52 or 0)
+        score += (lower == "n" and 9 or 0)
+        score += (lower == "b" and center * 2.0 or 0)
+        score += (targetLower == "k" and 80 or 0)
+        score += (tf >= 5 and tr >= 5 and lower ~= "p" and 3 or 0)
+    elseif State.AIStyle == "Trickery" then
+        score += quiet and 34 or 0
+        score += (lower == "n" and 24 or 0)
+        score += (lower == "p" and flank and 22 or 0)
+        score += (lower == "b" and not targetLower and 13 or 0)
+        score += isPromo and 28 or 0
+        score -= captureValue * 1.5
+    elseif State.AIStyle == "Positional" then
+        score += center * 15
+        score += (lower == "n" or lower == "b") and 24 or 0
+        score += (lower == "r" and (tf == 4 or tf == 5) and 8 or 0)
+        score += quiet and 7 or 0
+        score += isCastle and 14 or 0
+        score -= (lower == "q" and quiet and 6 or 0)
+    elseif State.AIStyle == "Endgame" then
+        score += lower == "k" and 34 or 0
+        score += lower == "p" and (math.abs(tr - fr) * 12 + ((tf == 4 or tf == 5) and 7 or 0)) or 0
+        score += lower == "r" and 18 or 0
+        score += captureValue == 1 and 16 or 0
+        score += isPromo and 65 or 0
+        score -= lower == "q" and quiet and 10 or 0
+    elseif State.AIStyle == "Alien Gambit" then
+        score += (lower == "n" and (to == "g5" or to == "e5" or to == "f7" or to == "e4") and 55 or 0)
+        score += (lower == "b" and (to == "c4" or to == "b5" or to == "g5") and 25 or 0)
+        score += (lower == "p" and (to == "e4" or to == "d4" or to == "f4") and 16 or 0)
+        score += captureValue * 7
+        score += quiet and 8 or 0
+    elseif State.AIStyle == "Willy Alien" then
+        score += (lower == "n" and 42 or 0)
+        score += (lower == "b" and 21 or 0)
+        score += flank and 30 or 0
+        score += (lower == "p" and flank and 28 or 0)
+        score += (quiet and not isCastle) and 18 or 0
+        score += isPromo and 36 or 0
+        score += (lower == "r" and (tf == 1 or tf == 8) and 15 or 0)
+        score += captureValue * 4
+    end
+
+    return score
+end
+
+local function chooseCandidateMoves(fen, primaryMove, wanted)
+    local moves = getLegalMoves(fen)
+    if #moves == 0 then
+        return primaryMove and {primaryMove} or {}
+    end
+
+    local matrix = boardToMatrix(fen)
+    local ranked = {}
+    local seen = {}
+
+    for _, move in ipairs(moves) do
+        if move ~= primaryMove then
+            ranked[#ranked + 1] = {
+                move = move,
+                priority = styleCandidatePriority(fen, move, matrix),
+            }
+        end
+    end
+
+    table.sort(ranked, function(a, b)
+        if a.priority == b.priority then
+            return a.move < b.move
+        end
+        return a.priority > b.priority
+    end)
+
+    local result = {}
+    local limit = math.max(2, math.min(wanted or 4, #moves + 1))
+
+    if primaryMove then
+        result[#result + 1] = primaryMove
+        seen[primaryMove] = true
+    end
+
+    local alienBookMove = getAlienGambitPlanMove(fen)
+    if alienBookMove and not seen[alienBookMove] and #result < limit then
+        seen[alienBookMove] = true
+        result[#result + 1] = alienBookMove
+    end
+
+    for _, entry in ipairs(ranked) do
+        if #result >= limit then
+            break
+        end
+        if not seen[entry.move] then
+            seen[entry.move] = true
+            result[#result + 1] = entry.move
+        end
+    end
+
+    return result
+end
+
+local function getSmartCount()
+    local base = tonumber(State.SearchTime) or 2.5
+    local profile = getAIProfile()
+    local maximum = profile.WillyAlien and 14 or 10
+    local automatic = math.clamp(math.floor(base + (profile.WillyAlien and 5 or 2)), 4, maximum)
+
+    if State.AIStyle == "Balanced" then
+        return math.clamp(State.SecondChoiceCount or automatic, 3, maximum)
+    end
+
+    return math.clamp(math.max(State.SecondChoiceCount or 0, automatic), 5, maximum)
+end
+
+local function getSmartChildTime()
+
+    local base = tonumber(State.SearchTime) or 2.5
+    local profile = getAIProfile()
+    local maximum = profile.WillyAlien and 1.70 or 1.15
+    return math.clamp(base * 0.28 * (tonumber(profile.ThinkMultiplier) or 1), 0.22, maximum)
+
+end
+
+local function getSmartVerifyTime()
+
+    local base = tonumber(State.SearchTime) or 2.5
+    local profile = getAIProfile()
+    local maximum = profile.WillyAlien and 2.00 or 1.55
+    return math.clamp(base * 0.38 * (tonumber(profile.ThinkMultiplier) or 1), 0.25, maximum)
+
+end
+
+local function engineLineScore(fen, move, token, timeOverride)
+
+    local nextFen = applyUCIMove(fen, move)
+    if not nextFen then
+        return nil, nil
+    end
+
+    if token and token ~= State.AnalysisToken then
+        return nil, nil
+    end
+
+    local reply
+    local replyScore
+    local childTime = timeOverride or getSmartChildTime()
+
+    if ActiveAPI and ActiveAPI.GetBestMoveFromFEN then
+        local ok, a, b = pcall(function()
+            return ActiveAPI:GetBestMoveFromFEN(nextFen, childTime)
+        end)
+        if ok then
+            reply = a
+            replyScore = b
+        end
+    end
+
+    if not reply then
+        reply = fallbackMove(nextFen)
+    end
+
+    if token and token ~= State.AnalysisToken then
+        return nil, nil
+    end
+
+    if not reply then
+        local mat = materialDetails(nextFen)
+        if not mat then
+            return move, nil
+        end
+        local mine = localSide()
+        local score = mine == "w" and mat.balance or mine == "b" and -mat.balance or 0
+        return move, score
+    end
+
+    local numeric = normalizeEngineScore(replyScore)
+    if numeric then
+        return reply, -numeric
+    end
+
+    return reply, nil
+
+end
+
+local function willyAlienMoveBias(fen, move)
+    local profile = getAIProfile()
+    if not profile or profile.WillyAlien ~= true or type(move) ~= "string" then
+        return 0
+    end
+
+    local matrix = boardToMatrix(fen)
+    if not matrix then
+        return 0
+    end
+
+    local from, to = move:sub(1, 2), move:sub(3, 4)
+    local ff, fr = squareToCoords(from)
+    local tf, tr = squareToCoords(to)
+    if not ff or not tf then
+        return 0
+    end
+
+    local piece = matrix[fr][ff]
+    local target = matrix[tr][tf]
+    local lower = piece and piece:lower() or ""
+    local targetLower = target and target ~= "." and target:lower() or nil
+    local bias = 0
+
+    local unusualKnightSquares = {
+        c5 = true, e5 = true, g5 = true, b5 = true,
+        d4 = true, f4 = true, a3 = true, h3 = true,
+    }
+    if lower == "n" and unusualKnightSquares[to] then
+        bias += 0.105
+    end
+
+    if lower == "p" and (to:sub(1,1) == "a" or to:sub(1,1) == "h") then
+        bias += 0.075
+    end
+
+    if lower == "b" and (to == "g2" or to == "b2" or to == "g7" or to == "b7") then
+        bias += 0.080
+    end
+
+    if lower == "r" and (to == "a3" or to == "h3" or to == "a6" or to == "h6") then
+        bias += 0.055
+    end
+
+    if lower == "q" and not targetLower then
+        bias -= 0.045
+    end
+
+    if targetLower then
+        bias += 0.025
+    end
+
+    if move:sub(5, 5) ~= "" then
+        bias += 0.045
+    end
+
+    return math.clamp(bias, -0.08, 0.16)
+end
+
+local function styleMoveBias(fen, move)
+    if type(move) ~= "string" then
+        return 0
+    end
+
+    local profile = getAIProfile()
+    local matrix = boardToMatrix(fen)
+    if not matrix then
+        return 0
+    end
+
+    local from, to = move:sub(1, 2), move:sub(3, 4)
+    local ff, fr = squareToCoords(from)
+    local tf, tr = squareToCoords(to)
+    if not ff or not tf then
+        return 0
+    end
+
+    local piece = matrix[fr][ff]
+    local target = matrix[tr][tf]
+    local lower = piece and piece:lower() or ""
+    local targetLower = target and target ~= "." and target:lower() or nil
+    local bias = 0
+    local isCastle = (from == "e1" and (to == "g1" or to == "c1"))
+        or (from == "e8" and (to == "g8" or to == "c8"))
+    local isPromo = move:sub(5, 5) ~= ""
+    local quiet = not targetLower
+
+    if targetLower then
+        bias += profile.Aggression * math.min(0.16, (pieceValues[targetLower] or 0) * 0.018)
+        bias += profile.Tactical * math.min(0.20, (pieceValues[targetLower] or 0) * 0.022)
+    end
+
+    if move:sub(5, 5) ~= "" then
+        bias += profile.Aggression * 0.10 + profile.Tactical * 0.12 + profile.Endgame * 0.06
+    end
+
+    local centerDistance = math.abs(4.5 - tf) + math.abs(4.5 - tr)
+    bias += math.max(0, 4.5 - centerDistance) * profile.Positional * 0.025
+
+    if (from == "e1" and (to == "g1" or to == "c1")) or (from == "e8" and (to == "g8" or to == "c8")) then
+        bias += profile.Calmness * 0.12 + profile.Positional * 0.08
+    end
+
+    if lower == "k" and math.abs(tf - ff) ~= 2 then
+        bias -= profile.Calmness * 0.08
+        bias += profile.Endgame * 0.08
+    end
+
+    if lower == "p" then
+        bias += math.abs(tr - fr) * (profile.Aggression * 0.018 + profile.Endgame * 0.025)
+    end
+
+    if not targetLower and lower ~= "q" and lower ~= "k" then
+        bias += profile.Trickiness * 0.075
+    end
+
+    if lower == "q" and not targetLower then
+        bias -= profile.Calmness * 0.06
+    end
+
+    if profile.AlienGambit == true then
+        bias += alienPatternBias(fen, move)
+    end
+
+    if profile.WillyAlien == true then
+        bias += willyAlienMoveBias(fen, move)
+    end
+
+    if State.AIStyle == "Aggressive" then
+        bias += (targetLower and (pieceValues[targetLower] or 0) * 0.055 or 0)
+        bias += (lower == "q" and not targetLower and 0.035 or 0)
+        bias += (lower == "p" and math.abs(tr - fr) * 0.010 or 0)
+    elseif State.AIStyle == "Calm" then
+        bias += isCastle and 0.18 or 0
+        bias += quiet and 0.055 or 0
+        bias += (lower == "n" or lower == "b") and 0.045 or 0
+        bias -= (targetLower and 0.025 or 0)
+    elseif State.AIStyle == "Defensive" then
+        bias += isCastle and 0.24 or 0
+        bias += quiet and 0.07 or 0
+        bias -= (lower == "k" and not isCastle and 0.09 or 0)
+        bias -= (lower == "p" and (to:sub(1,1) == "a" or to:sub(1,1) == "h") and 0.04 or 0)
+    elseif State.AIStyle == "Tactical" then
+        bias += targetLower and (pieceValues[targetLower] or 0) * 0.075 or 0
+        bias += isPromo and 0.18 or 0
+        bias += lower == "n" and 0.035 or 0
+    elseif State.AIStyle == "Trickery" then
+        bias += quiet and 0.12 or 0
+        bias += lower == "n" and 0.075 or 0
+        bias += (lower == "p" and (tf == 1 or tf == 8) and 0.065 or 0)
+        bias += (lower == "b" and quiet and 0.045 or 0)
+    elseif State.AIStyle == "Positional" then
+        local c = math.max(0, 4.5 - (math.abs(4.5 - tf) + math.abs(4.5 - tr)))
+        bias += c * 0.035
+        bias += (lower == "n" or lower == "b") and 0.07 or 0
+        bias += isCastle and 0.08 or 0
+        bias += quiet and 0.025 or 0
+    elseif State.AIStyle == "Endgame" then
+        bias += lower == "k" and 0.12 or 0
+        bias += lower == "p" and math.abs(tr - fr) * 0.022 or 0
+        bias += lower == "r" and 0.055 or 0
+        bias += targetLower == "p" and 0.065 or 0
+        bias += isPromo and 0.18 or 0
+    elseif State.AIStyle == "Alien Gambit" then
+        bias += (lower == "n" and (to == "g5" or to == "e5" or to == "f7") and 0.20 or 0)
+        bias += (lower == "b" and (to == "c4" or to == "b5") and 0.08 or 0)
+        bias += (lower == "p" and (to == "e4" or to == "d4" or to == "f4") and 0.06 or 0)
+    elseif State.AIStyle == "Willy Alien" then
+        bias += lower == "n" and 0.13 or 0
+        bias += lower == "b" and 0.055 or 0
+        bias += (tf == 1 or tf == 8) and 0.075 or 0
+        bias += (quiet and not isCastle) and 0.065 or 0
+        bias += isPromo and 0.10 or 0
+        bias += (lower == "r" and (tf == 1 or tf == 8) and 0.06 or 0)
+    end
+
+    return math.clamp(bias, -0.35, 2.80)
+end
+
+local function styleSelectLine(fen, lines, primaryNumeric)
+    if type(lines) ~= "table" or #lines == 0 then
+        return nil
+    end
+
+    local style = State.AIStyle
+    local matrix = boardToMatrix(fen)
+
+    table.sort(lines, function(a, b)
+        if a.score == b.score then
+            return (a.move or "") < (b.move or "")
+        end
+        return (a.score or -math.huge) > (b.score or -math.huge)
+    end)
+
+    local poolSizeByStyle = {
+        Balanced = 1,
+        Aggressive = 4,
+        Calm = 3,
+        Defensive = 3,
+        Tactical = 5,
+        Trickery = 6,
+        Positional = 4,
+        Endgame = 4,
+        ["Alien Gambit"] = 7,
+        ["Willy Alien"] = 9,
+    }
+
+    local rawWeightByStyle = {
+        Balanced = 1.00,
+        Aggressive = 0.30,
+        Calm = 0.70,
+        Defensive = 0.82,
+        Tactical = 0.24,
+        Trickery = 0.16,
+        Positional = 0.55,
+        Endgame = 0.48,
+        ["Alien Gambit"] = 0.12,
+        ["Willy Alien"] = 0.08,
+    }
+
+    local poolSize = math.min(poolSizeByStyle[style] or 3, #lines)
+    local rawWeight = rawWeightByStyle[style] or 0.65
+
+    if poolSize <= 1 then
+        return lines[1]
+    end
+
+    local pool = {}
+    for i = 1, poolSize do
+        pool[#pool + 1] = lines[i]
+    end
+
+    local bestRaw = tonumber(lines[1].score) or -math.huge
+
+    local function policyScore(line)
+        local move = line.move
+        local raw = tonumber(line.score) or -math.huge
+        local rank = 0
+        for i, candidate in ipairs(lines) do
+            if candidate == line then
+                rank = i
+                break
+            end
+        end
+
+        local rankBonus = math.max(0, poolSize + 1 - rank) * 0.035
+        local styleValue = styleCandidatePriority(fen, move, matrix)
+        local biasValue = styleMoveBias(fen, move)
+        local weirdValue = (style == "Willy Alien") and willyAlienMoveBias(fen, move) or 0
+
+        local normalizedRaw = raw - bestRaw
+
+        if style == "Balanced" then
+            return raw
+        elseif style == "Aggressive" then
+            return normalizedRaw * rawWeight
+                + styleValue * 0.22
+                + biasValue * 7.0
+                + rankBonus
+        elseif style == "Calm" then
+            return normalizedRaw * rawWeight
+                + styleValue * 0.18
+                + biasValue * 5.5
+                + rankBonus
+        elseif style == "Defensive" then
+            return normalizedRaw * rawWeight
+                + styleValue * 0.22
+                + biasValue * 6.2
+                + rankBonus
+        elseif style == "Tactical" then
+            return normalizedRaw * rawWeight
+                + styleValue * 0.34
+                + biasValue * 9.5
+                + rankBonus
+        elseif style == "Trickery" then
+            return normalizedRaw * rawWeight
+                + styleValue * 0.40
+                + biasValue * 12.0
+                + rankBonus
+        elseif style == "Positional" then
+            return normalizedRaw * rawWeight
+                + styleValue * 0.30
+                + biasValue * 8.0
+                + rankBonus
+        elseif style == "Endgame" then
+            return normalizedRaw * rawWeight
+                + styleValue * 0.34
+                + biasValue * 8.3
+                + rankBonus
+        elseif style == "Alien Gambit" then
+            return normalizedRaw * rawWeight
+                + styleValue * 0.46
+                + biasValue * 14.0
+                + rankBonus
+        elseif style == "Willy Alien" then
+            return normalizedRaw * rawWeight
+                + styleValue * 0.38
+                + biasValue * 11.5
+                + weirdValue * 22.0
+                + rankBonus
+        end
+
+        return normalizedRaw * rawWeight + styleValue * 0.20 + biasValue * 5.0
+    end
+
+    local chosen
+    local chosenValue = -math.huge
+    for _, line in ipairs(pool) do
+        line.PolicyScore = policyScore(line)
+        if line.PolicyScore > chosenValue then
+            chosen = line
+            chosenValue = line.PolicyScore
+        elseif line.PolicyScore == chosenValue and chosen then
+            if (line.score or -math.huge) > (chosen.score or -math.huge) then
+                chosen = line
+            end
+        end
+    end
+
+    return chosen or lines[1]
+end
+
+local function smartChoicePlan(fen, primaryMove, token)
+    local wanted = getSmartCount()
+    local candidates = chooseCandidateMoves(fen, primaryMove, wanted)
+    local lines = {}
+    local childTime = getSmartChildTime()
+
+    local primaryReply, primaryScore = engineLineScore(fen, primaryMove, token, childTime)
+    if token ~= State.AnalysisToken then
+        return primaryMove, primaryReply, primaryScore, lines
+    end
+
+    local primaryNumeric = tonumber(primaryScore)
+    if primaryNumeric == nil then
+        return primaryMove, primaryReply, primaryScore, lines
+    end
+
+    lines[#lines + 1] = {
+        move = primaryMove,
+        reply = primaryReply,
+        score = primaryNumeric,
+        primary = true,
+    }
+    
+    for _, candidate in ipairs(candidates) do
+        if token ~= State.AnalysisToken then
+            return primaryMove, primaryReply, primaryNumeric, lines
+        end
+
+        if candidate ~= primaryMove then
+            local reply, score = engineLineScore(fen, candidate, token, childTime)
+            local lineScore = tonumber(score)
+            if lineScore ~= nil then
+                lines[#lines + 1] = {
+                    move = candidate,
+                    reply = reply,
+                    score = lineScore,
+                    primary = false,
+                }
+            end
+        end
+    end
+
+    if #lines == 1 then
+        return primaryMove, primaryReply, primaryNumeric, lines
+    end
+
+    table.sort(lines, function(a, b)
+        if a.score == b.score then
+            return (a.move or "") < (b.move or "")
+        end
+        return (a.score or -math.huge) > (b.score or -math.huge)
+    end)
+
+    local profile = getAIProfile()
+    local selected = styleSelectLine(fen, lines, primaryNumeric) or lines[1]
+
+    if profile.AlienGambit == true then
+        local alienMove = getAlienGambitPlanMove(fen)
+        if alienMove then
+            for _, line in ipairs(lines) do
+                if line.move == alienMove then
+                    local rawDelta = (line.score or primaryNumeric) - primaryNumeric
+                    if rawDelta >= -math.max(tonumber(profile.MaxEngineGiveback) or 0) then
+                        selected = line
+                    end
+                    break
+                end
+            end
+        end
+    end
+
+    if profile.WillyAlien == true then
+        local deepTime = math.max(getSmartVerifyTime(), math.min(2.4, (tonumber(State.SearchTime) or 2.5) * 0.72))
+        local bestPolicy = selected
+        local bestPolicyScore = -math.huge
+
+        for _, line in ipairs(lines) do
+            if token ~= State.AnalysisToken then
+                return primaryMove, primaryReply, primaryNumeric, lines
+            end
+
+            local raw = tonumber(line.score)
+            if raw then
+                local delta = raw - primaryNumeric
+                if delta >= -math.max(tonumber(profile.MaxEngineGiveback) or 0) then
+                    local reply2, score2 = engineLineScore(fen, line.move, token, deepTime)
+                    local verified = tonumber(score2) or raw
+                    local weird = willyAlienMoveBias(fen, line.move)
+                    local value = verified * 0.78 + raw * 0.22 + weird * 16.0
+
+                    if value > bestPolicyScore then
+                        bestPolicyScore = value
+                        bestPolicy = line
+                        bestPolicy.DeepReply = reply2
+                        bestPolicy.DeepScore = verified
+                    end
+                end
+            end
+        end
+
+        selected = bestPolicy or selected
+        if selected.DeepReply then
+            selected.reply = selected.DeepReply
+        end
+        if selected.DeepScore then
+            selected.score = selected.DeepScore
+        end
+    end
+
+    local finalMove = selected.move or primaryMove
+    local finalReply = selected.reply or primaryReply
+    local finalScore = tonumber(selected.score) or primaryNumeric
+
+    if finalMove ~= primaryMove then
+        pcall(setStatus, tostring(State.AIStyle) .. " policy pick • " .. tostring(finalMove))
+    end
+
+    if finalMove ~= primaryMove then
+        local verifyTime = getSmartVerifyTime()
+        local verifyPrimaryReply, verifyPrimaryScore = engineLineScore(fen, primaryMove, token, verifyTime)
+        local verifyChosenReply, verifyChosenScore = engineLineScore(fen, finalMove, token, verifyTime)
+        local pScore = tonumber(verifyPrimaryScore)
+        local cScore = tonumber(verifyChosenScore)
+
+        if token ~= State.AnalysisToken then
+            return primaryMove, primaryReply, primaryNumeric, lines
+        end
+
+        local safetyFloor = math.max(tonumber(profile.MaxEngineGiveback) or 0, 0.05)
+        if pScore and cScore and cScore < pScore - safetyFloor then
+            finalMove = primaryMove
+            finalReply = verifyPrimaryReply or primaryReply
+            finalScore = pScore
+            pcall(setStatus, tostring(State.AIStyle) .. " safety fallback • primary line retained")
+        else
+            finalReply = verifyChosenReply or finalReply
+            finalScore = cScore or finalScore
+        end
+    end
+
+    for _, entry in ipairs(lines) do
+        if entry.move == finalMove then
+            entry.reply = finalReply or entry.reply
+            entry.score = finalScore or entry.score
+            break
+        end
+    end
+
+    return finalMove, finalReply, finalScore, lines
+end
+
+local secondChoicePlan = smartChoicePlan
+
+local function getUiParent()
+
+    local ok, hui = pcall(function()
+
+        return gethui()
+
+    end)
+
+    if ok and hui then
+
+        return hui
+
+    end
+
+    local ok2, core = pcall(function()
+
+        return game:GetService("CoreGui")
+
+    end)
+
+    if ok2 then
+
+        return core
+
+    end
+
+    return LocalPlayer:WaitForChild("PlayerGui")
+
+end
+
+local function create(className, props, parent)
+
+    local obj = Instance.new(className)
+
+    for k, v in pairs(props or {}) do
+
+        obj[k] = v
+
+    end
+
+    obj.Parent = parent
+
+    return obj
+
+end
+
+local function setElementContent(element, title, desc)
+
+    if not element then
+        return
+    end
+
+    if title ~= nil then
+        pcall(function()
+            if element.SetTitle then
+                element:SetTitle(title)
+            end
+        end)
+    end
+
+    if desc ~= nil then
+        pcall(function()
+            if element.SetDesc then
+                element:SetDesc(desc)
+                return
+            end
+            if element.Set then
+                element:Set(desc)
+            end
+        end)
+    end
+
+end
+
+local function setStatus(text)
+    State.StatusText = text
+    if State.Status then
+        setElementContent(State.Status, "STATUS", text)
+    end
+end
+
+local function shortScore(score)
+    if score == nil then
+        return "—"
+    end
+    local n = tonumber(score)
+    if not n then
+        return tostring(score)
+    end
+    local rounded = math.floor(n * 100 + 0.5) / 100
+    if rounded > 0 then
+        return "+" .. tostring(rounded)
+    end
+    return tostring(rounded)
+end
+activeColor = function()
+    return string.match(State.FEN or "", "^%S+ (%S+)")
+end
+local function playerRefMatchesLocal(ref)
+    if ref == nil then
+        return false
+    end
+
+    if typeof(ref) == "Instance" and ref:IsA("Player") then
+        return ref == LocalPlayer
+    end
+    if type(ref) == "table" then
+        local candidates = {
+            ref.Name,
+            ref.name,
+            ref.Username,
+            ref.username,
+            ref.DisplayName,
+            ref.displayName,
+            ref.UserId,
+            ref.userId,
+        }
+        for _, value in ipairs(candidates) do
+            if playerRefMatchesLocal(value) then
+                return true
+            end
+        end
+        return false
+    end
+    local text = tostring(ref)
+    if text == LocalPlayer.Name or text == LocalPlayer.DisplayName then
+        return true
+    end
+    local numeric = tonumber(text)
+    if numeric and numeric == LocalPlayer.UserId then
+        return true
+    end
+    return false
+end
+local function sideFromValue(value)
+    if value == nil then
+        return nil
+    end
+    if type(value) == "boolean" then
+        return value and "w" or "b"
+    end
+
+    if type(value) == "number" then
+        if value == 1 then
+            return "w"
+        elseif value == 0 or value == 2 then
+            return "b"
+        end
+    end
+
+    if type(value) == "string" then
+        local v = value:lower():gsub("%s+", "")
+        if v == "w" or v == "white" or v == "whiteside" or v == "whiteplayer" or v == "whitepiece" or v == "whitepieces" then
+            return "w"
+        end
+        if v == "b" or v == "black" or v == "blackside" or v == "blackplayer" or v == "blackpiece" or v == "blackpieces" then
+            return "b"
+        end
+    end
+
+    return nil
+
+end
+
+local function resolveLocalSide(data)
+
+    if type(data) ~= "table" then
+        return nil
+    end
+
+    if type(data.AmIWhite) == "boolean" then
+        return data.AmIWhite and "w" or "b"
+    end
+
+    local explicit = {
+        data.LocalSide,
+        data.localSide,
+        data.PlayerSide,
+        data.playerSide,
+        data.MySide,
+        data.mySide,
+        data.PlayerColor,
+        data.playerColor,
+        data.MyColor,
+        data.myColor,
+        data.Color,
+        data.color,
+        data.ChessColor,
+        data.chessColor,
+        data.BoardColor,
+        data.boardColor,
+    }
+
+    for _, value in ipairs(explicit) do
+        local side = sideFromValue(value)
+        if side then
+            return side
+        end
+    end
+
+    local whiteFlags = {
+        data.IsWhite,
+        data.isWhite,
+        data.YouAreWhite,
+        data.youAreWhite,
+    }
+
+    for _, value in ipairs(whiteFlags) do
+        if type(value) == "boolean" then
+            return value and "w" or "b"
+        end
+    end
+
+    local blackFlags = {
+        data.IsBlack,
+        data.isBlack,
+        data.YouAreBlack,
+        data.youAreBlack,
+    }
+
+    for _, value in ipairs(blackFlags) do
+        if type(value) == "boolean" and value then
+            return "b"
+        end
+    end
+
+    local whiteRef = data.whiteName or data.WhiteName or data.whitePlayer or data.WhitePlayer or data.WhiteUser or data.whiteUser or data.whiteRef or data.WhiteRef
+    local blackRef = data.blackName or data.BlackName or data.blackPlayer or data.BlackPlayer or data.BlackUser or data.blackUser or data.blackRef or data.BlackRef
+
+    if playerRefMatchesLocal(whiteRef) then
+        return "w"
+    end
+
+    if playerRefMatchesLocal(blackRef) then
+        return "b"
+    end
+
+    for key, value in pairs(data) do
+        local keyText = tostring(key):lower()
+        if keyText:find("side", 1, true) or keyText:find("color", 1, true) or keyText:find("colour", 1, true) or keyText:find("iswhite", 1, true) or keyText:find("isblack", 1, true) or keyText:find("youarewhite", 1, true) or keyText:find("youareblack", 1, true) then
+            local side = sideFromValue(value)
+            if side then
+                return side
+            end
+        end
+    end
+
+    for key, value in pairs(data) do
+        local keyText = tostring(key):lower()
+        if keyText:find("white", 1, true) and playerRefMatchesLocal(value) then
+            return "w"
+        end
+        if keyText:find("black", 1, true) and playerRefMatchesLocal(value) then
+            return "b"
+        end
+    end
+
+    return nil
+
+end
+
+localSide = function()
+
+    if State.LocalSideOverride == "w" or State.LocalSideOverride == "b" then
+        return State.LocalSideOverride
+    end
+
+    if playerRefMatchesLocal(State.WhiteName) then
+        return "w"
+    end
+
+    if playerRefMatchesLocal(State.BlackName) then
+        return "b"
+    end
+
+    return nil
+
+end
+
+
+local function sideBelongsToLocal(side)
+
+    local mine = localSide()
+    return side ~= nil and mine ~= nil and side == mine
+
+end
+
+local function isMyTurn()
+
+    return State.FEN ~= nil and sideBelongsToLocal(activeColor())
+
+end
+
+local function updateStatus()
+
+    if not State.GameID or not State.FEN then
+
+        setStatus("Waiting for a chess game...")
+
+        return
+
+    end
+
+    if not State.Enabled then
+
+        setStatus("AI paused")
+
+        return
+
+    end
+
+    local mineSide = localSide()
+
+    local sideText = mineSide == "w" and "White" or mineSide == "b" and "Black" or "Unknown side"
+
+    if State.Running then
+
+        setStatus("You are " .. sideText .. " • analyzing position...")
+
+    elseif isMyTurn() then
+
+        if State.BestMove then
+
+            setStatus("Best move found • ready")
+
+        else
+
+            setStatus("Your turn • analyzing")
+
+        end
+
+    else
+
+        setStatus("Opponent turn • watching")
+
+    end
+
+end
+
+local function parseUCI(move)
+
+    if type(move) ~= "string" then
+
+        return nil
+
+    end
+
+    local a, b, promo = move:match("^([a-h][1-8])([a-h][1-8])([qrbn]?)")
+
+    if not a or not b then
+
+        return nil
+
+    end
+
+    return a, b, promo ~= "" and promo or nil
+
+end
+
+local function squareIndex(square)
+
+    local file = string.byte(square, 1) - string.byte("a")
+
+    local rank = tonumber(square:sub(2))
+
+    if not file or not rank then
+
+        return nil
+
+    end
+
+    return file, rank
+
+end
+
+local function fenPieceAt(fen, square)
+
+    if type(fen) ~= "string" or type(square) ~= "string" then
+        return nil
+    end
+
+    local placement = fen:match("^(%S+)")
+    if not placement then
+        return nil
+    end
+
+    local file = string.byte(square, 1) - string.byte("a") + 1
+    local rank = tonumber(square:sub(2))
+    if file < 1 or file > 8 or not rank or rank < 1 or rank > 8 then
+        return nil
+    end
+
+    local rows = string.split(placement, "/")
+    local row = rows[9 - rank]
+    if not row then
+        return nil
+    end
+
+    local col = 0
+    for i = 1, #row do
+        local ch = row:sub(i, i)
+        local digit = tonumber(ch)
+        if digit then
+            col += digit
+        else
+            col += 1
+            if col == file then
+                return ch
+            end
+        end
+    end
+    return nil
+end
+
+local function getDetectedRippleSide(sourceSquare)
+    local piece
+
+    if type(sourceSquare) == "string" then
+        piece = fenPieceAt(State.AnalysisFEN or State.FEN, sourceSquare)
+        if piece then
+            return piece:match("%u") and "w" or "b"
+        end
+
+        piece = fenPieceAt(State.FEN, sourceSquare)
+        if piece then
+            return piece:match("%u") and "w" or "b"
+        end
+    end
+
+    if State.AnalysisSide == "w" or State.AnalysisSide == "b" then
+        return State.AnalysisSide
+    end
+
+    return localSide()
+end
+
+local function getTeamRippleColors(sourceSquare)
+    local side = getDetectedRippleSide(sourceSquare)
+
+    if side == "b" then
+        return Color3.fromRGB(255, 88, 72), Color3.fromRGB(255, 140, 110)
+    end
+
+    if side == "w" then
+        return Color3.fromRGB(255, 202, 64), Color3.fromRGB(255, 235, 145)
+    end
+
+    local fromColor, _, fromGlow = getAIHighlightColors()
+    return fromColor, fromGlow
+end
+
+local function findBoardGui()
+
+    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+
+    if not playerGui then
+
+        return nil
+
+    end
+
+    local candidates = {}
+
+    for _, obj in ipairs(playerGui:GetDescendants()) do
+
+        if obj:IsA("Frame") or obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+
+            local name = string.lower(obj.Name)
+
+            local looksLikeBoard =
+
+                name:find("chessboard", 1, true) or
+
+                name == "board" or
+
+                name:find("chess_board", 1, true) or
+
+                (name:find("chess", 1, true) and name:find("board", 1, true))
+
+            if obj.Visible then
+
+                local size = obj.AbsoluteSize
+
+                if size.X >= 180 and size.Y >= 180 then
+
+                    local ratio = size.X / math.max(size.Y, 1)
+
+                    local squarePenalty = math.abs(1 - ratio)
+
+                    if looksLikeBoard then
+
+                        squarePenalty -= 0.25
+
+                    end
+
+                    if squarePenalty <= 0.18 then
+
+                        table.insert(candidates, {
+
+                            object = obj,
+
+                            area = size.X * size.Y,
+
+                            penalty = squarePenalty
+
+                        })
+
+                    end
+
+                end
+
+            end
+
+        end
+
+    end
+
+    table.sort(candidates, function(a, b)
+
+        if a.penalty ~= b.penalty then
+
+            return a.penalty < b.penalty
+
+        end
+
+        return a.area > b.area
+
+    end)
+
+    return candidates[1] and candidates[1].object or nil
+
+end
+
+local function ensureOverlayParent(board)
+
+    if not board or not board.Parent then
+
+        return false
+
+    end
+
+    if not State.Overlay then
+
+        return false
+
+    end
+
+    if State.Overlay.Parent ~= board then
+
+        State.Overlay.Parent = board
+
+    end
+
+    State.Overlay.Position = UDim2.fromScale(0, 0)
+
+    State.Overlay.Size = UDim2.fromScale(1, 1)
+
+    State.Overlay.AnchorPoint = Vector2.zero
+
+    State.Overlay.BackgroundTransparency = 1
+
+    State.Overlay.BorderSizePixel = 0
+
+    State.Overlay.ZIndex = 1000
+
+    State.Overlay.ClipsDescendants = false
+
+    return true
+
+end
+
+local function tweenHighlight(part, targetTransparency, duration)
+
+    if not part then
+        return
+    end
+
+    pcall(function()
+        local tween = TweenService:Create(
+            part,
+            TweenInfo.new(duration or 0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {BackgroundTransparency = targetTransparency}
+        )
+        tween:Play()
+    end)
+
+end
+
+local function makePersistentHighlight(name)
+
+    if not State.Overlay then
+        return nil
+    end
+
+    if State.HighlightParts[name] and State.HighlightParts[name].Parent == State.Overlay then
+        return State.HighlightParts[name]
+    end
+
+    local frame = create("Frame", {
+        Name = name,
+        AnchorPoint = Vector2.zero,
+        Size = UDim2.fromScale(1 / 8, 1 / 8),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Active = false,
+        Visible = false,
+        ZIndex = 1001,
+    }, State.Overlay)
+
+    create("UICorner", {
+        CornerRadius = UDim.new(0, 3),
+    }, frame)
+
+    State.HighlightParts[name] = frame
+    return frame
+
+end
+
+local function makePersistentDot(name, parent, color, sizeScale)
+
+    if not parent then
+        return nil
+    end
+
+    if State.HighlightDots[name] and State.HighlightDots[name].Parent == parent then
+        local dot = State.HighlightDots[name]
+        dot.BackgroundColor3 = color
+        return dot
+    end
+
+    local dot = create("Frame", {
+        Name = name,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromScale(sizeScale or 0.27, sizeScale or 0.27),
+        BackgroundColor3 = color,
+        BackgroundTransparency = 0.10,
+        BorderSizePixel = 0,
+        ZIndex = 1003,
+    }, parent)
+
+    create("UICorner", {
+        CornerRadius = UDim.new(1, 0),
+    }, dot)
+
+    State.HighlightDots[name] = dot
+    return dot
+
+end
+
+local function hideHighlight(name)
+
+    local part = State.HighlightParts[name]
+    if not part then
+        return
+    end
+
+    if part.Visible then
+        tweenHighlight(part, 1, 0.10)
+    end
+
+    part.Visible = false
+    State.HighlightSquares[name] = nil
+
+end
+
+local function parseSquareFromText(value)
+
+    if type(value) ~= "string" then
+        return nil
+    end
+
+    local compact = value:lower():gsub("%s+", "")
+    local square = compact:match("([a-h][1-8])")
+    return square
+
+end
+
+local function inferBoardOrientationFromGui(board)
+
+    if not board then
+        return nil
+    end
+
+    local fileLabels = {}
+    local rankLabels = {}
+
+    for _, obj in ipairs(board:GetDescendants()) do
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+            if obj.Visible then
+                local raw = tostring(obj.Text or "")
+                local text = raw:lower():gsub("%s+", "")
+                local center = obj.AbsolutePosition + (obj.AbsoluteSize / 2)
+
+                if text:match("^[a-h]$") then
+                    fileLabels[text] = center.X
+                elseif text:match("^[1-8]$") then
+                    rankLabels[text] = center.Y
+                end
+            end
+        end
+    end
+
+    local aX = fileLabels.a
+    local hX = fileLabels.h
+    local oneY = rankLabels["1"]
+    local eightY = rankLabels["8"]
+
+    if aX and hX and math.abs(aX - hX) > 4 then
+        if aX < hX then
+            if oneY and eightY then
+                return oneY > eightY and "w" or "b"
+            end
+            return "w"
+        else
+            if oneY and eightY then
+                return oneY < eightY and "b" or "w"
+            end
+            return "b"
+        end
+    end
+
+    if oneY and eightY and math.abs(oneY - eightY) > 4 then
+        return oneY > eightY and "w" or "b"
+    end
+
+    return nil
+
+end
+
+local function normalizeBoardOrientation(value)
+
+    if type(value) == "string" then
+        local v = value:lower():gsub("%s+", "")
+        if v == "w" or v == "white" or v == "whiteview" or v == "whiteperspective" or v == "normal" then
+            return "w"
+        end
+        if v == "b" or v == "black" or v == "blackview" or v == "blackperspective" or v == "flipped" or v == "reverse" or v == "reversed" then
+            return "b"
+        end
+    elseif type(value) == "boolean" then
+        return value and "b" or "w"
+    end
+
+    return nil
+
+end
+
+local function resolveBoardOrientation(data)
+
+    if type(data) ~= "table" then
+        return nil
+    end
+
+    local explicit = {
+        data.BoardOrientation,
+        data.boardOrientation,
+        data.BoardPerspective,
+        data.boardPerspective,
+        data.Perspective,
+        data.perspective,
+        data.ViewSide,
+        data.viewSide,
+        data.BoardSide,
+        data.boardSide,
+        data.Orientation,
+        data.orientation,
+    }
+
+    for _, value in ipairs(explicit) do
+        local side = normalizeBoardOrientation(value)
+        if side then
+            return side
+        end
+    end
+
+    local flipFields = {
+        data.BoardFlipped,
+        data.boardFlipped,
+        data.IsBoardFlipped,
+        data.isBoardFlipped,
+        data.FlipBoard,
+        data.flipBoard,
+        data.Reversed,
+        data.reversed,
+    }
+
+    for _, value in ipairs(flipFields) do
+        if type(value) == "boolean" then
+            return value and "b" or "w"
+        end
+    end
+
+    for key, value in pairs(data) do
+        local keyText = tostring(key):lower()
+        if keyText:find("boardorientation", 1, true)
+            or keyText:find("boardperspective", 1, true)
+            or keyText:find("boardflipped", 1, true)
+            or keyText:find("boardside", 1, true)
+            or keyText:find("perspective", 1, true) then
+            local side = normalizeBoardOrientation(value)
+            if side then
+                return side
+            end
+        end
+    end
+
+    return nil
+
+end
+
+local function normalizeSquareName(value)
+
+    if type(value) ~= "string" then
+        return nil
+    end
+
+    local v = value:lower()
+    local compact = v:gsub("[^a-z0-9]", "")
+
+    if #compact == 2 and compact:match("^[a-h][1-8]$") then
+        return compact
+    end
+
+    local square = v:match("[^a-z0-9]([a-h][1-8])[^a-z0-9]")
+        or v:match("^([a-h][1-8])[^a-z0-9]")
+        or v:match("[^a-z0-9]([a-h][1-8])$")
+
+    if square then
+        return square
+    end
+
+    if compact:sub(-2):match("^[a-h][1-8]$") then
+        return compact:sub(-2)
+    end
+
+    if compact:sub(1, 2):match("^[a-h][1-8]$") then
+        return compact:sub(1, 2)
+    end
+
+    return nil
+
+end
+
+local function getSquareGuiMap(board)
+
+    local map = {}
+
+    if not board then
+        return map
+    end
+
+    local boardSize = board.AbsoluteSize
+    local target = math.max(12, math.min(boardSize.X, boardSize.Y) / 8)
+
+    for _, obj in ipairs(board:GetDescendants()) do
+        if obj:IsA("GuiObject") and obj.Visible then
+            local square = normalizeSquareName(obj.Name)
+
+            if not square and (obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox")) then
+                square = normalizeSquareName(obj.Text)
+            end
+
+            if square then
+                local size = obj.AbsoluteSize
+                local ratio = size.X / math.max(size.Y, 1)
+                local squarePenalty = math.abs(1 - ratio)
+                local sizePenalty = math.abs(size.X - target) + math.abs(size.Y - target)
+                local area = size.X * size.Y
+
+                if size.X > 6 and size.Y > 6 and squarePenalty < 0.45 then
+                    local score = squarePenalty * target + sizePenalty
+                    local current = map[square]
+                    if not current or score < current.Score then
+                        map[square] = {
+                            Object = obj,
+                            Area = area,
+                            Score = score,
+                        }
+                    end
+                end
+            end
+        end
+    end
+
+    return map
+
+end
+
+local function getBoardOrientation(board)
+
+    local guiOrientation = inferBoardOrientationFromGui(board)
+    if guiOrientation then
+        return guiOrientation
+    end
+
+    local mine = localSide()
+    if mine == "w" or mine == "b" then
+        return mine
+    end
+
+    if State.BoardOrientation == "w" or State.BoardOrientation == "b" then
+        return State.BoardOrientation
+    end
+
+    return "w"
+
+end
+
+local getBoardSquareEntry
+
+local function getSquareVisualRect(board, square)
+
+    if not board or not square then
+        return nil
+    end
+
+    local tile = board:FindFirstChild(square)
+    if not tile or not tile:IsA("GuiObject") or not tile.Visible then
+        return nil
+    end
+
+    local boardPos = board.AbsolutePosition
+    local boardSize = board.AbsoluteSize
+    local tilePos = tile.AbsolutePosition
+    local tileSize = tile.AbsoluteSize
+
+    if boardSize.X <= 0 or boardSize.Y <= 0 or tileSize.X <= 0 or tileSize.Y <= 0 then
+        return nil
+    end
+
+    return {
+        x = (tilePos.X - boardPos.X) / boardSize.X,
+        y = (tilePos.Y - boardPos.Y) / boardSize.Y,
+        w = tileSize.X / boardSize.X,
+        h = tileSize.Y / boardSize.Y,
+    }
+
+end
+
+local function setHighlight(name, square, fillColor, transparency)
+
+    local part = makePersistentHighlight(name)
+    if not part or not square then
+        hideHighlight(name)
+        return
+    end
+
+    local rect = getSquareVisualRect(State.OverlayBoard, square)
+    if not rect then
+        hideHighlight(name)
+        return
+    end
+
+    local oldSquare = State.HighlightSquares[name]
+
+    part.Position = UDim2.fromScale(rect.x, rect.y)
+    part.Size = UDim2.fromScale(rect.w, rect.h)
+    part.BackgroundColor3 = fillColor
+
+    local changed = oldSquare ~= square or not part.Visible
+    State.HighlightSquares[name] = square
+    part.Visible = true
+
+    if changed then
+        part.BackgroundTransparency = 1
+        tweenHighlight(part, transparency or 0.78, 0.10)
+    else
+        part.BackgroundTransparency = transparency or 0.78
+    end
+
+end
+
+getBoardSquareEntry = function(board, square)
+
+    if not board or not square then
+        return nil
+    end
+
+    local map = getSquareGuiMap(board)
+    return map[square]
+
+end
+
+local function clearHighlights()
+
+    State.PulseToken += 1
+    hidePulseParts()
+
+    for name in pairs(State.HighlightParts) do
+        hideHighlight(name)
+    end
+
+    State.BoardSignature = nil
+
+end
+
+local function createPulsePart(index, rippleColor, rippleGlow)
+
+    if not State.Overlay then
+        return nil
+    end
+
+    local name = "BestPulse_" .. tostring(index)
+    local part = State.PulseParts[name]
+
+    if part and part.Parent == State.Overlay then
+        return part
+    end
+
+    if not rippleColor or not rippleGlow then
+        rippleColor, rippleGlow = getTeamRippleColors(State.BestMove and State.BestMove:sub(1, 2))
+    end
+
+    part = create("Frame", {
+        Name = name,
+        AnchorPoint = Vector2.zero,
+        BackgroundColor3 = rippleColor,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Visible = false,
+        Active = false,
+        ZIndex = 1002,
+    }, State.Overlay)
+
+    create("UICorner", {
+        CornerRadius = UDim.new(0, 4),
+    }, part)
+
+    create("UIStroke", {
+        Thickness = 1.4,
+        Transparency = 0.20,
+        Color = rippleGlow,
+    }, part)
+
+    State.PulseParts[name] = part
+    return part
+
+end
+
+local function hidePulseParts()
+
+    for _, part in pairs(State.PulseParts) do
+        if part then
+            part.Visible = false
+        end
+    end
+
+end
+
+local function movePulsePart(part, board, square)
+
+    local rect = getSquareVisualRect(board, square)
+    if not rect or not part then
+        return false
+    end
+
+    part.Position = UDim2.fromScale(rect.x, rect.y)
+    part.Size = UDim2.fromScale(rect.w, rect.h)
+    return true
+
+end
+
+local function buildMovePath(from, to)
+
+    local ff, fr = squareIndex(from)
+    local tf, tr = squareIndex(to)
+
+    if ff == nil or tf == nil then
+        return {from, to}
+    end
+
+    local df = tf - ff
+    local dr = tr - fr
+
+    local stepF = 0
+    local stepR = 0
+
+    if df == 0 and dr ~= 0 then
+        stepR = dr > 0 and 1 or -1
+    elseif dr == 0 and df ~= 0 then
+        stepF = df > 0 and 1 or -1
+    elseif math.abs(df) == math.abs(dr) then
+        stepF = df > 0 and 1 or -1
+        stepR = dr > 0 and 1 or -1
+    else
+        return {from, to}
+    end
+
+    local path = {from}
+    local f, r = ff, fr
+
+    while f ~= tf or r ~= tr do
+        f += stepF
+        r += stepR
+        if f < 0 or f > 7 or r < 1 or r > 8 then
+            return {from, to}
+        end
+
+        local square = string.char(string.byte("a") + f) .. tostring(r)
+        table.insert(path, square)
+
+        if #path > 8 then
+            break
+        end
+    end
+
+    if path[#path] ~= to then
+        table.insert(path, to)
+    end
+
+    return path
+
+end
+
+local function startBestMovePulse(from, to)
+
+    State.PulseToken += 1
+    local token = State.PulseToken
+    local board = State.OverlayBoard
+
+    if not board then
+        return
+    end
+
+    hidePulseParts()
+
+    local path = buildMovePath(from, to)
+    local rippleColor, rippleGlow = getTeamRippleColors(from)
+
+    task.spawn(function()
+        for index, square in ipairs(path) do
+            if token ~= State.PulseToken or not State.ShowBoardOverlay or not State.HighlightBestMove then
+                return
+            end
+
+            local part = createPulsePart(index, rippleColor, rippleGlow)
+            if not movePulsePart(part, board, square) then
+                return
+            end
+
+            part.BackgroundColor3 = rippleColor
+            part.Visible = true
+            part.BackgroundTransparency = 1
+
+            local stroke = part:FindFirstChildOfClass("UIStroke")
+            if stroke then
+                stroke.Color = rippleGlow
+            end
+
+            local inTween = TweenService:Create(
+                part,
+                TweenInfo.new(0.045, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                {BackgroundTransparency = 0.45}
+            )
+            inTween:Play()
+            inTween.Completed:Wait()
+
+            if token ~= State.PulseToken then
+                return
+            end
+
+            local outTween = TweenService:Create(
+                part,
+                TweenInfo.new(0.045, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                {BackgroundTransparency = 0.88}
+            )
+            outTween:Play()
+            outTween.Completed:Wait()
+
+            if token ~= State.PulseToken then
+                return
+            end
+        end
+    end)
+
+end
+
+local getLiveChessGameClient
+
+local function drawBestMove(from, to)
+
+    local fromColor, toColor = getAIHighlightColors()
+    setHighlight("BestFrom", from, fromColor, 0.82)
+    setHighlight("BestTo", to, toColor, 0.79)
+
+    local fromFrame = State.HighlightParts.BestFrom
+    local toFrame = State.HighlightParts.BestTo
+
+    if fromFrame then
+        local fromColor = getAIHighlightColors()
+        makePersistentDot("BestFromDot", fromFrame, fromColor, 0.28)
+    end
+
+    if toFrame then
+        local _, toColor = getAIHighlightColors()
+        makePersistentDot("BestToDot", toFrame, toColor, 0.24)
+    end
+
+    startBestMovePulse(from, to)
+
+end
+
+getLiveChessGameClient = function()
+
+    local playerScripts = LocalPlayer:FindFirstChildOfClass("PlayerScripts")
+    if not playerScripts then
+        return nil
+    end
+
+    local proxyModule = findDescendant(playerScripts, "ChessProxyService")
+    if not proxyModule or not proxyModule:IsA("ModuleScript") then
+        return nil
+    end
+
+    local ok, proxy = pcall(require, proxyModule)
+    if not ok or type(proxy) ~= "table" then
+        return nil
+    end
+
+    if type(proxy.ChessGame) == "table" and proxy.ChessGame.Active then
+        return proxy.ChessGame
+    end
+
+    return nil
+
+end
+
+local function getLive2DBoard()
+
+    local gameClient = getLiveChessGameClient()
+    if gameClient and type(gameClient.Ui2D) == "table" then
+        local ref = gameClient.Ui2D.Ref
+        if ref then
+            local board = ref:FindFirstChild("Board")
+            if board then
+                return board
+            end
+        end
+    end
+
+    return nil
+
+end
+
+local function createExactMarker(tile, kind)
+
+    if not tile or not tile:IsA("GuiObject") then
+        return nil
+    end
+
+    local isDestination = kind == "to"
+    local markerName = isDestination and "__BotMoveTo" or "__BotMoveFrom"
+    local old = tile:FindFirstChild(markerName)
+    if old then
+        old:Destroy()
+    end
+
+    local fromColor, toColor, fromGlow, toGlow = getAIHighlightColors()
+    local color = isDestination and toColor or fromColor
+    local glow = isDestination and toGlow or fromGlow
+
+    local marker = Instance.new("Frame")
+    marker.Name = markerName
+    marker.AnchorPoint = Vector2.new(0.5, 0.5)
+    marker.Position = UDim2.fromScale(0.5, 0.5)
+    marker.Size = UDim2.fromScale(0.90, 0.90)
+    marker.BackgroundColor3 = color
+    marker.BackgroundTransparency = 1
+    marker.BorderSizePixel = 0
+    marker.Active = false
+    marker.ZIndex = 1001
+    marker.Parent = tile
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 9)
+    corner.Parent = marker
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Name = "MoveStroke"
+    stroke.Thickness = isDestination and 2.2 or 1.8
+    stroke.Color = glow
+    stroke.Transparency = 1
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = marker
+
+    local scale = Instance.new("UIScale")
+    scale.Name = "MoveScale"
+    scale.Scale = 0.82
+    scale.Parent = marker
+
+    local inner = Instance.new("Frame")
+    inner.Name = "MoveInner"
+    inner.AnchorPoint = Vector2.new(0.5, 0.5)
+    inner.Position = UDim2.fromScale(0.5, 0.5)
+    inner.Size = UDim2.fromScale(isDestination and 0.68 or 0.58, isDestination and 0.68 or 0.58)
+    inner.BackgroundTransparency = 1
+    inner.BorderSizePixel = 0
+    inner.ZIndex = 1002
+    inner.Parent = marker
+
+    local innerCorner = Instance.new("UICorner")
+    innerCorner.CornerRadius = UDim.new(1, 0)
+    innerCorner.Parent = inner
+
+    local innerStroke = Instance.new("UIStroke")
+    innerStroke.Name = "InnerStroke"
+    innerStroke.Thickness = isDestination and 1.35 or 1.05
+    innerStroke.Color = glow
+    innerStroke.Transparency = 1
+    innerStroke.Parent = inner
+
+    local core = Instance.new("Frame")
+    core.Name = "MoveCore"
+    core.AnchorPoint = Vector2.new(0.5, 0.5)
+    core.Position = UDim2.fromScale(0.5, 0.5)
+    core.Size = UDim2.fromScale(isDestination and 0.20 or 0.16, isDestination and 0.20 or 0.16)
+    core.BackgroundColor3 = glow
+    core.BackgroundTransparency = 1
+    core.BorderSizePixel = 0
+    core.ZIndex = 1003
+    core.Parent = marker
+
+    local coreCorner = Instance.new("UICorner")
+    coreCorner.CornerRadius = UDim.new(1, 0)
+    coreCorner.Parent = core
+
+    marker:SetAttribute("BestMoveExact", true)
+    marker:SetAttribute("BestMoveKind", kind)
+
+    return marker
+
+end
+
+local function addBestMoveTileMarker(square, kind)
+
+    local gameClient = getLiveChessGameClient()
+    if not gameClient or type(gameClient.Ui2D) ~= "table" then
+        return nil
+    end
+
+    local ref = gameClient.Ui2D.Ref
+    local board = ref and ref:FindFirstChild("Board")
+    if not board or not square then
+        return nil
+    end
+
+    local tile = board:FindFirstChild(square)
+    if not tile or not tile:IsA("GuiObject") then
+        return nil
+    end
+
+    return createExactMarker(tile, kind)
+
+end
+
+local function clearBestMoveTileMarkers()
+
+    State.PulseToken += 1
+    State.RippleToken += 1
+    State.RippleObjects = {}
+
+    if State.Overlay then
+        local travel = State.Overlay:FindFirstChild("__BotMoveTravel")
+        if travel then
+            travel:Destroy()
+        end
+    end
+
+    local board = getLive2DBoard()
+    if not board then
+        return
+    end
+
+    for _, tile in ipairs(board:GetChildren()) do
+        if tile:IsA("GuiObject") then
+            for _, child in ipairs(tile:GetChildren()) do
+                if child.Name == "__BotMoveFrom"
+                    or child.Name == "__BotMoveTo"
+                    or child.Name == "__BestMoveFrom"
+                    or child.Name == "__BestMoveTo"
+                    or child.Name == "__BotMoveHighlight"
+                    or child.Name == "__BotMoveDot"
+                    or child.Name == "__BestMoveMarker"
+                    or child.Name == "__BestMovePulse"
+                    or child.Name == "__StandaloneMoveRipple" then
+                    child:Destroy()
+                end
+            end
+        end
+    end
+
+end
+
+local function buildExactMovePath(from, to)
+
+    local ff, fr = squareIndex(from)
+    local tf, tr = squareIndex(to)
+
+    if ff == nil or tf == nil then
+        return {from, to}
+    end
+
+    local df = tf - ff
+    local dr = tr - fr
+    local stepF = 0
+    local stepR = 0
+
+    if df == 0 and dr ~= 0 then
+        stepR = dr > 0 and 1 or -1
+    elseif dr == 0 and df ~= 0 then
+        stepF = df > 0 and 1 or -1
+    elseif math.abs(df) == math.abs(dr) then
+        stepF = df > 0 and 1 or -1
+        stepR = dr > 0 and 1 or -1
+    else
+        return {from, to}
+    end
+
+    local path = {from}
+    local f, r = ff, fr
+
+    while f ~= tf or r ~= tr do
+        f += stepF
+        r += stepR
+
+        if f < 0 or f > 7 or r < 1 or r > 8 then
+            return {from, to}
+        end
+
+        path[#path + 1] = string.char(string.byte("a") + f) .. tostring(r)
+
+        if #path > 8 then
+            break
+        end
+    end
+
+    if path[#path] ~= to then
+        path[#path + 1] = to
+    end
+    return path
+end
+
+local function getSquareCenterUDim2(board, square)
+
+    if not board or not square then
+        return nil
+    end
+
+    local tile = board:FindFirstChild(square)
+    if not tile or not tile:IsA("GuiObject") then
+        return nil
+    end
+
+    local boardPosition = board.AbsolutePosition
+    local tilePosition = tile.AbsolutePosition
+    local tileSize = tile.AbsoluteSize
+
+    local centerX = (tilePosition.X - boardPosition.X) + (tileSize.X * 0.5)
+    local centerY = (tilePosition.Y - boardPosition.Y) + (tileSize.Y * 0.5)
+
+    return UDim2.fromOffset(centerX, centerY)
+
+end
+
+local function animateMoveMarker(marker, isDestination, token)
+
+    if not marker then
+        return
+    end
+
+    local stroke = marker:FindFirstChild("MoveStroke")
+    local innerStroke = marker:FindFirstChild("InnerStroke")
+    local core = marker:FindFirstChild("MoveCore")
+    local scale = marker:FindFirstChild("MoveScale")
+
+    marker.Visible = true
+    marker.BackgroundTransparency = 1
+
+    if stroke then
+        stroke.Transparency = 1
+    end
+
+    if innerStroke then
+        innerStroke.Transparency = 1
+    end
+
+    if core then
+        core.BackgroundTransparency = 1
+    end
+
+    if scale then
+        scale.Scale = 0.82
+    end
+
+    local entrance = TweenService:Create(
+        marker,
+        TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+        {BackgroundTransparency = isDestination and 0.84 or 0.91}
+    )
+
+    local entranceScale = scale and TweenService:Create(
+        scale,
+        TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+        {Scale = 1}
+    )
+
+    local strokeIn = stroke and TweenService:Create(
+        stroke,
+        TweenInfo.new(0.20, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {Transparency = isDestination and 0.08 or 0.18}
+    )
+
+    local innerIn = innerStroke and TweenService:Create(
+        innerStroke,
+        TweenInfo.new(0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {Transparency = isDestination and 0.25 or 0.42}
+    )
+
+    local coreIn = core and TweenService:Create(
+        core,
+        TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {BackgroundTransparency = 0.08}
+    )
+
+    entrance:Play()
+    if entranceScale then entranceScale:Play() end
+    if strokeIn then strokeIn:Play() end
+    if innerIn then innerIn:Play() end
+    if coreIn then coreIn:Play() end
+
+    task.spawn(function()
+        entrance.Completed:Wait()
+        while token == State.PulseToken
+            and marker.Parent
+            and State.HighlightBestMove
+            and State.BestMove do
+
+            local brightTransparency = isDestination and 0.78 or 0.87
+            local dimTransparency = isDestination and 0.90 or 0.95
+
+            local bright = TweenService:Create(
+                marker,
+                TweenInfo.new(0.72, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+                {BackgroundTransparency = brightTransparency}
+            )
+            local brightScale = scale and TweenService:Create(
+                scale,
+                TweenInfo.new(0.72, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+                {Scale = isDestination and 1.035 or 1.018}
+            )
+            local brightStroke = stroke and TweenService:Create(
+                stroke,
+                TweenInfo.new(0.72, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+                {Transparency = isDestination and 0.02 or 0.10}
+            )
+            local brightInner = innerStroke and TweenService:Create(
+                innerStroke,
+                TweenInfo.new(0.72, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+                {Transparency = isDestination and 0.15 or 0.30}
+            )
+
+            bright:Play()
+            if brightScale then brightScale:Play() end
+            if brightStroke then brightStroke:Play() end
+            if brightInner then brightInner:Play() end
+            bright.Completed:Wait()
+
+            if token ~= State.PulseToken then
+                break
+            end
+
+            local dim = TweenService:Create(
+                marker,
+                TweenInfo.new(0.72, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+                {BackgroundTransparency = dimTransparency}
+            )
+            local dimScale = scale and TweenService:Create(
+                scale,
+                TweenInfo.new(0.72, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+                {Scale = 1}
+            )
+            local dimStroke = stroke and TweenService:Create(
+                stroke,
+                TweenInfo.new(0.72, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+                {Transparency = isDestination and 0.13 or 0.22}
+            )
+            local dimInner = innerStroke and TweenService:Create(
+                innerStroke,
+                TweenInfo.new(0.72, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+                {Transparency = isDestination and 0.28 or 0.42}
+            )
+
+            dim:Play()
+            if dimScale then dimScale:Play() end
+            if dimStroke then dimStroke:Play() end
+            if dimInner then dimInner:Play() end
+            dim.Completed:Wait()
+        end
+    end)
+
+end
+
+local function getRippleGameClient()
+    local playerScripts = LocalPlayer:FindFirstChildOfClass("PlayerScripts")
+    if not playerScripts then
+        return nil
+    end
+
+    local proxyModule = findDescendant(playerScripts, "ChessProxyService")
+    if not proxyModule or not proxyModule:IsA("ModuleScript") then
+        return nil
+    end
+
+    local ok, proxy = pcall(require, proxyModule)
+    if not ok or type(proxy) ~= "table" then
+        return nil
+    end
+
+    local gameClient = proxy.ChessGame
+    if type(gameClient) == "table" and gameClient.Active then
+        return gameClient
+    end
+
+    return nil
+end
+
+local function getRippleBoard()
+    local gameClient = getRippleGameClient()
+    if not gameClient or type(gameClient.Ui2D) ~= "table" then
+        return nil
+    end
+
+    local ref = gameClient.Ui2D.Ref
+    local board = ref and ref:FindFirstChild("Board")
+    if board and board:IsA("GuiObject") then
+        return board
+    end
+
+    return nil
+end
+
+local function getRippleTile(board, square)
+    if not board or type(square) ~= "string" then
+        return nil
+    end
+
+    local tile = board:FindFirstChild(square)
+    if tile and tile:IsA("GuiObject") then
+        return tile
+    end
+
+    return nil
+end
+
+local function getRipplePieceSide(sourceSquare)
+    local fen = State.AnalysisFEN or State.FEN
+    local piece = fenPieceAt(fen, sourceSquare)
+    if not piece then
+        return nil
+    end
+    return piece:match("%u") and "w" or "b"
+end
+
+local function getRippleColorsForTile(kind, side)
+    local fromColor, toColor, fromGlow, toGlow = getAIHighlightColors()
+
+    if kind == "to" then
+        return toColor, toGlow
+    end
+
+    return fromColor, fromGlow
+end
+
+local function createStandaloneRipple(tile, kind, color, glow, token)
+    if not tile then
+        return nil
+    end
+
+    local old = tile:FindFirstChild("__StandaloneMoveRipple")
+    if old then
+        old:Destroy()
+    end
+
+    local ripple = Instance.new("Frame")
+    ripple.Name = "__StandaloneMoveRipple"
+    ripple.AnchorPoint = Vector2.new(0.5, 0.5)
+    ripple.Position = UDim2.fromScale(0.5, 0.5)
+    ripple.Size = UDim2.fromScale(0.28, 0.28)
+    ripple.BackgroundTransparency = 1
+    ripple.BorderSizePixel = 0
+    ripple.Active = false
+    ripple.ZIndex = 1006
+    ripple.Parent = tile
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(1, 0)
+    corner.Parent = ripple
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Name = "RippleStroke"
+    stroke.Thickness = kind == "to" and 2.2 or 1.8
+    stroke.Color = glow
+    stroke.Transparency = 1
+    stroke.Parent = ripple
+
+    local scale = Instance.new("UIScale")
+    scale.Name = "RippleScale"
+    scale.Scale = 0.65
+    scale.Parent = ripple
+
+    local core = Instance.new("Frame")
+    core.Name = "RippleCore"
+    core.AnchorPoint = Vector2.new(0.5, 0.5)
+    core.Position = UDim2.fromScale(0.5, 0.5)
+    core.Size = UDim2.fromScale(kind == "to" and 0.18 or 0.15, kind == "to" and 0.18 or 0.15)
+    core.BackgroundColor3 = color
+    core.BackgroundTransparency = 1
+    core.BorderSizePixel = 0
+    core.ZIndex = 1007
+    core.Parent = ripple
+
+    local coreCorner = Instance.new("UICorner")
+    coreCorner.CornerRadius = UDim.new(1, 0)
+    coreCorner.Parent = core
+
+    State.RippleObjects[token] = State.RippleObjects[token] or {}
+    table.insert(State.RippleObjects[token], ripple)
+
+    local show = TweenService:Create(
+        ripple,
+        TweenInfo.new(0.11, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {BackgroundTransparency = 0.92}
+    )
+    local strokeShow = TweenService:Create(
+        stroke,
+        TweenInfo.new(0.11, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {Transparency = kind == "to" and 0.05 or 0.12}
+    )
+    local coreShow = TweenService:Create(
+        core,
+        TweenInfo.new(0.10, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {BackgroundTransparency = 0.12}
+    )
+    local grow = TweenService:Create(
+        scale,
+        TweenInfo.new(0.16, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+        {Scale = kind == "to" and 1.0 or 0.92}
+    )
+
+    show:Play()
+    strokeShow:Play()
+    coreShow:Play()
+    grow:Play()
+
+    task.spawn(function()
+        show.Completed:Wait()
+        if token ~= State.RippleToken or not ripple.Parent then
+            if ripple.Parent then ripple:Destroy() end
+            return
+        end
+
+        local fade = TweenService:Create(
+            ripple,
+            TweenInfo.new(kind == "to" and 0.24 or 0.17, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
+            {BackgroundTransparency = 1}
+        )
+        local strokeFade = TweenService:Create(
+            stroke,
+            TweenInfo.new(kind == "to" and 0.24 or 0.17, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
+            {Transparency = 1}
+        )
+        local coreFade = TweenService:Create(
+            core,
+            TweenInfo.new(kind == "to" and 0.20 or 0.14, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
+            {BackgroundTransparency = 1}
+        )
+        local expand = TweenService:Create(
+            scale,
+            TweenInfo.new(kind == "to" and 0.24 or 0.17, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+            {Scale = kind == "to" and 1.42 or 1.18}
+        )
+
+        fade:Play()
+        strokeFade:Play()
+        coreFade:Play()
+        expand:Play()
+        fade.Completed:Wait()
+
+        if ripple.Parent then
+            ripple:Destroy()
+        end
+    end)
+
+    return ripple
+end
+
+local function pulseExactBestMove(from, to, suppliedToken)
+    State.RippleToken = suppliedToken or (State.RippleToken + 1)
+    local token = State.RippleToken
+    State.RippleObjects[token] = {}
+
+    local board = getRippleBoard()
+    if not board then
+        return
+    end
+
+    local fromTile = getRippleTile(board, from)
+    local toTile = getRippleTile(board, to)
+    if not fromTile or not toTile then
+        return
+    end
+
+    local side = getRipplePieceSide(from) or State.AnalysisSide or localSide()
+    local path = buildExactMovePath(from, to)
+
+    task.spawn(function()
+        for index, square in ipairs(path) do
+            if token ~= State.RippleToken
+                or not State.HighlightBestMove
+                or not State.BestMove then
+                return
+            end
+
+            local liveBoard = getRippleBoard()
+            local tile = getRippleTile(liveBoard, square)
+            if not tile then
+                return
+            end
+
+            local kind = index == #path and "to" or (index == 1 and "from" or "path")
+            local rippleColor
+            local rippleGlow
+
+            if kind == "to" then
+                rippleColor, rippleGlow = getRippleColorsForTile("to", side)
+            else
+                rippleColor, rippleGlow = getRippleColorsForTile("from", side)
+            end
+
+            local ripple = createStandaloneRipple(tile, kind, rippleColor, rippleGlow, token)
+            if not ripple then
+                return
+            end
+
+            task.wait(kind == "to" and 0.06 or 0.035)
+        end
+
+        task.wait(0.20)
+        if State.RippleObjects[token] then
+            State.RippleObjects[token] = nil
+        end
+    end)
+end
+
+local function drawBestMoveExact(move)
+
+    clearBestMoveTileMarkers()
+
+    if type(move) ~= "string" then
+        return false
+    end
+
+    local from, to = parseUCI(move)
+    if not from or not to then
+        return false
+    end
+
+    local gameClient = getLiveChessGameClient()
+    if not gameClient or type(gameClient.Ui2D) ~= "table" then
+        return false
+    end
+
+    local ref = gameClient.Ui2D.Ref
+    local board = ref and ref:FindFirstChild("Board")
+    if not board then
+        return false
+    end
+
+    local fromMarker = addBestMoveTileMarker(from, "from")
+    local destinationMarker = addBestMoveTileMarker(to, "to")
+
+    if not fromMarker or not destinationMarker then
+        clearBestMoveTileMarkers()
+        return false
+    end
+
+    local token = State.PulseToken
+    animateMoveMarker(fromMarker, false, token)
+    animateMoveMarker(destinationMarker, true, token)
+    pulseExactBestMove(from, to, token)
+
+    return true
+
+end
+
+local function isFENString(value)
+
+    if type(value) ~= "string" then
+        return false
+    end
+
+    return value:match("^[^%s]+ [wb] [^%s]+ [^%s]+") ~= nil
+
+end
+
+local function refreshBoardOverlay()
+
+    if not State.ShowBoardOverlay then
+        State.PulseToken += 1
+        State.RippleToken += 1
+        hidePulseParts()
+        if State.Overlay then
+            State.Overlay.Visible = false
+        end
+        return
+    end
+
+    local board = findBoardGui()
+    if not board then
+        State.PulseToken += 1
+        State.RippleToken += 1
+        hidePulseParts()
+        if State.Overlay then
+            State.Overlay.Visible = false
+        end
+        return
+    end
+
+    if not ensureOverlayParent(board) then
+        return
+    end
+
+    State.Overlay.Visible = true
+    State.OverlayBoard = board
+    State.SquareGuiCache = getSquareGuiMap(board)
+
+    if not State.SquareGuiCache or next(State.SquareGuiCache) == nil then
+        State.BoardOrientation = getBoardOrientation(board)
+    else
+        State.BoardOrientation = nil
+    end
+
+    local signature = tostring(board:GetFullName())
+        .. "|"
+        .. tostring(board.AbsolutePosition.X)
+        .. ":"
+        .. tostring(board.AbsolutePosition.Y)
+        .. ":"
+        .. tostring(board.AbsoluteSize.X)
+        .. ":"
+        .. tostring(board.AbsoluteSize.Y)
+        .. "|"
+        .. tostring(State.LastMove or "")
+        .. "|"
+        .. tostring(State.BestMove or "")
+        .. "|"
+        .. tostring(localSide() or "")
+        .. "|"
+        .. tostring(State.BoardOrientation or "")
+        .. "|"
+        .. tostring(State.ShowLastMove)
+        .. "|"
+        .. tostring(State.HighlightBestMove)
+
+    if signature == State.BoardSignature then
+        return
+    end
+
+    State.BoardSignature = signature
+
+    if State.BestMove and State.HighlightBestMove then
+        hideHighlight("LastFrom")
+        hideHighlight("LastTo")
+        State.PulseToken += 1
+        hidePulseParts()
+        hideHighlight("BestFrom")
+        hideHighlight("BestTo")
+        clearBestMoveTileMarkers()
+        drawBestMoveExact(State.BestMove)
+        return
+    end
+
+    if State.ShowLastMove and State.LastMove then
+        local from, to = parseUCI(State.LastMove)
+        if from and to then
+            setHighlight("LastFrom", from, Color3.fromRGB(96, 154, 255), 0.87)
+            setHighlight("LastTo", to, Color3.fromRGB(96, 154, 255), 0.83)
+        else
+            hideHighlight("LastFrom")
+            hideHighlight("LastTo")
+        end
+    else
+        hideHighlight("LastFrom")
+        hideHighlight("LastTo")
+    end
+
+    if State.HighlightBestMove and State.BestMove then
+        local from, to = parseUCI(State.BestMove)
+        if from and to then
+            drawBestMove(from, to)
+        else
+            hideHighlight("BestFrom")
+            hideHighlight("BestTo")
+        end
+    else
+        State.PulseToken += 1
+        hidePulseParts()
+        hideHighlight("BestFrom")
+        hideHighlight("BestTo")
+    end
+
+end
+
+local function closeWindUIWindow(window)
+
+    if not window then
+        return
+    end
+
+    pcall(function()
+        if window.Destroy then
+            window:Destroy()
+        end
+    end)
+
+    pcall(function()
+        if window.Close then
+            window:Close()
+        end
+    end)
+
+end
+
+local function destroyAmIBannedGui()
+
+    if State.AmIBannedGui then
+        pcall(function()
+            State.AmIBannedGui:Destroy()
+        end)
+        State.AmIBannedGui = nil
+    end
+
+end
+
+local function guiTreeVisible(gui)
+
+    if not gui or not gui:IsA("GuiObject") then
+        return false
+    end
+
+    local current = gui
+
+    while current do
+        if current:IsA("GuiObject") and not current.Visible then
+            return false
+        end
+
+        if current:IsA("BillboardGui") and not current.Enabled then
+            return false
+        end
+
+        current = current.Parent
+
+        if current == game then
+            break
+        end
+    end
+
+    return true
+
+end
+
+local function findLocalBannedMarker(allowHidden)
+
+    local character = LocalPlayer.Character
+    if not character then
+        return nil, nil, nil
+    end
+
+    local head = character:FindFirstChild("Head")
+    if not head then
+        return nil, nil, nil
+    end
+
+    local function findMarker(root)
+        if not root then
+            return nil
+        end
+
+        local marker = root:FindFirstChild("Banned", true)
+        if marker and marker:IsA("GuiObject") then
+            if allowHidden or marker.Visible then
+                return marker
+            end
+        end
+
+        return nil
+    end
+
+    local marker = findMarker(head:FindFirstChild("Headboard"))
+        or findMarker(head)
+
+    if marker then
+        return marker, marker:FindFirstAncestorOfClass("BillboardGui"), head
+    end
+
+    return nil, nil, head
+
+end
+
+local function normalizeBanValue(value)
+
+    if typeof(value) == "boolean" then
+        return value
+    end
+
+    if typeof(value) == "number" then
+        return value ~= 0
+    end
+
+    if typeof(value) == "string" then
+        local v = value:lower():gsub("%s+", "")
+
+        if v == "true"
+            or v == "1"
+            or v == "yes"
+            or v == "banned"
+            or v == "ratingbanned"
+            or v == "ratingban" then
+            return true
+        end
+
+        if v == "false"
+            or v == "0"
+            or v == "no"
+            or v == "unbanned"
+            or v == "notbanned" then
+            return false
+        end
+    end
+
+    return nil
+
+end
+
+local function looksLikeBanName(name)
+
+    local n = tostring(name or ""):lower():gsub("[%s_%-]", "")
+
+    return n == "banned"
+        or n == "ban"
+        or n == "ratingban"
+        or n == "ratingbanned"
+        or n == "isbanned"
+        or n == "isratingbanned"
+
+end
+
+local function findExplicitBanState(root)
+
+    if not root then
+        return nil
+    end
+
+    local explicitFalse = false
+
+    for name, value in pairs(root:GetAttributes()) do
+        if looksLikeBanName(name) then
+            local state = normalizeBanValue(value)
+            if state == true then
+                return true
+            elseif state == false then
+                explicitFalse = true
+            end
+        end
+    end
+
+    for _, object in ipairs(root:GetDescendants()) do
+        if looksLikeBanName(object.Name) then
+            if object:IsA("BoolValue") then
+                if object.Value == true then
+                    return true
+                end
+                explicitFalse = true
+            elseif object:IsA("StringValue")
+                or object:IsA("IntValue")
+                or object:IsA("NumberValue") then
+                local state = normalizeBanValue(object.Value)
+                if state == true then
+                    return true
+                elseif state == false then
+                    explicitFalse = true
+                end
+            elseif object:IsA("GuiObject") then
+                if guiTreeVisible(object) then
+                    return true
+                end
+            end
+        end
+    end
+
+    if explicitFalse then
+        return false
+    end
+
+    return nil
+
+end
+
+local function getClientVisibleBanState()
+
+    local character = LocalPlayer.Character
+    local playerState = findExplicitBanState(LocalPlayer)
+
+    if playerState == true then
+        return true, "Player state"
+    end
+
+    if character then
+        local characterState = findExplicitBanState(character)
+        if characterState == true then
+            return true, "Character state"
+        end
+    end
+
+    local marker = select(1, findLocalBannedMarker())
+    if marker then
+        return true, "Visible Banned marker"
+    end
+
+    if playerState == false then
+        return false, "Player state"
+    end
+
+    if character then
+        local characterState = findExplicitBanState(character)
+        if characterState == false then
+            return false, "Character state"
+        end
+    end
+
+    return nil, "No authoritative client-side ban state"
+
+end
+
+local function copyProperty(target, source, property)
+
+    pcall(function()
+        target[property] = source[property]
+    end)
+
+end
+
+local function createAmIBannedGui(marker, sourceBoard, head)
+
+    destroyAmIBannedGui()
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "DiabloAmIBanned"
+    billboard.Adornee = head
+    billboard.AlwaysOnTop = true
+    billboard.LightInfluence = 0
+    billboard.ResetOnSpawn = false
+    billboard.Enabled = true
+
+    if sourceBoard and sourceBoard:IsA("BillboardGui") then
+        copyProperty(billboard, sourceBoard, "Size")
+        copyProperty(billboard, sourceBoard, "StudsOffset")
+        copyProperty(billboard, sourceBoard, "StudsOffsetWorldSpace")
+        copyProperty(billboard, sourceBoard, "ExtentsOffset")
+        copyProperty(billboard, sourceBoard, "ExtentsOffsetWorldSpace")
+        copyProperty(billboard, sourceBoard, "MaxDistance")
+        copyProperty(billboard, sourceBoard, "SizeOffset")
+    end
+
+    if billboard.Size == UDim2.new(0, 0, 0, 0) then
+        billboard.Size = UDim2.fromOffset(140, 36)
+    end
+
+    if billboard.StudsOffset == Vector3.zero then
+        billboard.StudsOffset = Vector3.new(0, 3.2, 0)
+    end
+
+    billboard.Parent = head
+
+    local clone
+    pcall(function()
+        clone = marker:Clone()
+    end)
+
+    if clone and clone:IsA("GuiObject") then
+        clone.Name = "BannedLocalDisplay"
+        clone.Visible = true
+        clone.Position = UDim2.fromScale(0, 0)
+        clone.Size = UDim2.fromScale(1, 1)
+        clone.AnchorPoint = Vector2.new(0, 0)
+
+        if clone:IsA("TextLabel")
+            or clone:IsA("TextButton")
+            or clone:IsA("TextBox") then
+            clone.TextTransparency = 0
+            clone.TextStrokeTransparency = math.min(clone.TextStrokeTransparency, 0.5)
+        end
+
+        clone.Parent = billboard
+    else
+        local label = Instance.new("TextLabel")
+        label.Name = "BannedLocalDisplay"
+        label.BackgroundTransparency = 1
+        label.Size = UDim2.fromScale(1, 1)
+        label.Position = UDim2.fromScale(0, 0)
+        label.Text = "Banned"
+        label.TextColor3 = Color3.new(1, 1, 1)
+        label.TextStrokeTransparency = 0.35
+        label.TextScaled = true
+        label.Font = Enum.Font.GothamBold
+        label.Parent = billboard
+    end
+
+    State.AmIBannedGui = billboard
+
+end
+
+function State.RefreshAmIBanned()
+
+    if not State.AmIBanned then
+        destroyAmIBannedGui()
+        return nil, "Disabled"
+    end
+
+    if State.AmIBannedGui and State.AmIBannedGui.Parent == nil then
+        State.AmIBannedGui = nil
+    end
+
+    local banned, reason = getClientVisibleBanState()
+
+    if banned ~= true then
+        destroyAmIBannedGui()
+        return banned, reason
+    end
+
+    if State.AmIBannedGui and State.AmIBannedGui.Parent then
+        return true, reason
+    end
+
+    local marker, sourceBoard, head = findLocalBannedMarker(true)
+    if marker and head then
+        createAmIBannedGui(marker, sourceBoard, head)
+        return true, reason
+    end
+
+    return true, reason
+
+end
+
+local function startAmIBannedWatcher()
+
+    State.AmIBannedToken = (State.AmIBannedToken or 0) + 1
+    local token = State.AmIBannedToken
+
+    task.spawn(function()
+        while State.AmIBanned and token == State.AmIBannedToken do
+            pcall(State.RefreshAmIBanned)
+            task.wait(0.5)
+        end
+    end)
+
+end
+
+local function showReadWarning()
+
+    if State.ReadWarningGui then
+        pcall(function()
+            State.ReadWarningGui:Destroy()
+        end)
+        State.ReadWarningGui = nil
+    end
+
+    local parent = getUiParent()
+    local gui = create("ScreenGui", {
+        Name = "DiabloReadWarning",
+        IgnoreGuiInset = true,
+        ResetOnSpawn = false,
+        DisplayOrder = 10000,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    }, parent)
+
+    State.ReadWarningGui = gui
+
+    local dim = create("Frame", {
+        Name = "Dim",
+        BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+        BackgroundTransparency = 0.30,
+        BorderSizePixel = 0,
+        Size = UDim2.fromScale(1, 1),
+        Position = UDim2.fromScale(0, 0),
+        Active = true,
+        ZIndex = 1,
+    }, gui)
+
+    local card = create("Frame", {
+        Name = "Card",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, -24),
+        Size = UDim2.fromOffset(520, 330),
+        BackgroundColor3 = Color3.fromRGB(18, 18, 22),
+        BackgroundTransparency = 0.04,
+        BorderSizePixel = 0,
+        ZIndex = 2,
+    }, gui)
+
+    create("UICorner", {
+        CornerRadius = UDim.new(0, 16),
+    }, card)
+
+    create("UIStroke", {
+        Thickness = 1,
+        Transparency = 0.55,
+        Color = Color3.fromRGB(255, 255, 255),
+    }, card)
+
+    create("UIPadding", {
+        PaddingTop = UDim.new(0, 24),
+        PaddingBottom = UDim.new(0, 20),
+        PaddingLeft = UDim.new(0, 24),
+        PaddingRight = UDim.new(0, 24),
+    }, card)
+
+    create("TextLabel", {
+        Name = "Title",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 34),
+        Font = Enum.Font.GothamBold,
+        Text = "Please Read Before Continuing",
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextSize = 24,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 3,
+    }, card)
+
+    create("TextLabel", {
+        Name = "Body",
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(0, 48),
+        Size = UDim2.new(1, 0, 0, 152),
+        Font = Enum.Font.Gotham,
+        Text = "Please be careful while using this script. Using third-party automation in an online game can lead to warnings, restrictions or a ban, and there is no guarantee against anti-cheat action.\n\nOnly continue if you understand the risk and accept responsibility for how you use the script. Do not use an account you are unwilling to risk.",
+        TextColor3 = Color3.fromRGB(218, 218, 224),
+        TextSize = 15,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        ZIndex = 3,
+    }, card)
+
+    create("TextLabel", {
+        Name = "Agreement",
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 0, 1, -86),
+        Size = UDim2.new(1, 0, 0, 46),
+        Font = Enum.Font.GothamSemibold,
+        Text = "By clicking Continue, you confirm that you have read this notice, understand the risks, and agree to use the script at your own risk.",
+        TextColor3 = Color3.fromRGB(178, 178, 188),
+        TextSize = 12,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        ZIndex = 3,
+    }, card)
+
+    local cancel = create("TextButton", {
+        Name = "Cancel",
+        AutoButtonColor = false,
+        AnchorPoint = Vector2.new(1, 1),
+        Position = UDim2.new(1, -124, 1, -14),
+        Size = UDim2.fromOffset(106, 38),
+        BackgroundColor3 = Color3.fromRGB(38, 38, 44),
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamSemibold,
+        Text = "Cancel",
+        TextColor3 = Color3.fromRGB(230, 230, 236),
+        TextSize = 13,
+        ZIndex = 3,
+    }, card)
+
+    create("UICorner", {
+        CornerRadius = UDim.new(0, 10),
+    }, cancel)
+
+    local continueButton = create("TextButton", {
+        Name = "Continue",
+        AutoButtonColor = false,
+        AnchorPoint = Vector2.new(1, 1),
+        Position = UDim2.new(1, 0, 1, -14),
+        Size = UDim2.fromOffset(106, 38),
+        BackgroundColor3 = Color3.fromRGB(210, 84, 126),
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamBold,
+        Text = "Continue",
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextSize = 13,
+        ZIndex = 3,
+    }, card)
+
+    create("UICorner", {
+        CornerRadius = UDim.new(0, 10),
+    }, continueButton)
+
+    cancel.MouseButton1Click:Connect(function()
+        State.ReadAccepted = false
+        State.Enabled = false
+        pcall(function()
+            State.Destroy()
+        end)
+    end)
+
+    continueButton.MouseButton1Click:Connect(function()
+        State.ReadAccepted = true
+        if State.ReadWarningGui then
+            State.ReadWarningGui:Destroy()
+            State.ReadWarningGui = nil
+        end
+        pcall(function()
+            State.TryMove(false)
+        end)
+    end)
+
+    card.BackgroundTransparency = 1
+    card.Position = UDim2.new(0.5, 0, 0.5, -44)
+
+    TweenService:Create(card, TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+        BackgroundTransparency = 0.04,
+        Position = UDim2.new(0.5, 0, 0.5, -24),
+    }):Play()
+
+end
+
+local function makeUI()
+
+    if State.Gui then
+        closeWindUIWindow(State.Gui)
+    end
+
+    if State.Overlay then
+        pcall(function()
+            State.Overlay:Destroy()
+        end)
+    end
+
+    State.HighlightParts = {}
+    State.HighlightSquares = {}
+    State.HighlightDots = {}
+    State.PulseParts = {}
+    State.PulseToken = (State.PulseToken or 0) + 1
+    State.SquareGuiCache = {}
+    State.BoardSignature = nil
+    State.OverlayBoard = nil
+
+    if State.BoardConn then
+        pcall(function()
+            State.BoardConn:Disconnect()
+        end)
+        State.BoardConn = nil
+    end
+
+    local Window = WindUI:CreateWindow({
+        Title = "Diablo Hub I Chess cracked by artemis",
+        Icon = "crown",
+        Author = "Diablo",
+        Folder = "ChessAnalyzer",
+        Size = UDim2.fromOffset(700, 480),
+        MinSize = Vector2.new(580, 390),
+        MaxSize = Vector2.new(920, 680),
+        ToggleKey = Enum.KeyCode.K,
+        Transparent = true,
+        Theme = DEFAULT_THEME,
+        Resizable = true,
+        SideBarWidth = 165,
+        HideSearchBar = true,
+        ScrollBarEnabled = true,
+        BackgroundImageTransparency = 0.5,
+        ShadowTransparency = 0.22,
+        Radius = 14,
+        ElementsRadius = 10,
+        Acrylic = true,
+        NewElements = true,
+        HidePanelBackground = true,
+        Topbar = {
+            Height = 44,
+            ButtonsType = "Mac",
+        },
+        OpenButton = {
+            Title = "Open Diablo",
+            Icon = "crown",
+            CornerRadius = UDim.new(1, 0),
+            StrokeThickness = 1,
+            Draggable = true,
+            Enabled = true,
+            OnlyMobile = false,
+            Scale = 0.92,
+            Color = GetOpenButtonColor(DEFAULT_THEME),
+        },
+        User = {
+            Enabled = true,
+            Anonymous = false,
+            Callback = function()
+                Notify("Diablo", LocalPlayer.Name, "user", 3)
+            end,
+        },
+    })
+
+    pcall(function()
+        Window:SetBackgroundTransparency(0.5)
+    end)
+
+    local VersionTag = Window:Tag({
+        Title = VERSION,
+        Icon = "badge-check",
+        Color = GetTagColor(DEFAULT_THEME),
+        Radius = 7,
+    })
+
+    local EngineTag = Window:Tag({
+        Title = ActiveAPI and ("API: " .. ActiveAPIName) or "API: OFFLINE",
+        Icon = "cpu",
+        Color = GetTagColor(DEFAULT_THEME),
+        Radius = 7,
+    })
+
+    local ReadTab = Window:Tab({
+        Title = "Read",
+        Icon = "book-open-check",
+    })
+
+    local ChessTab = Window:Tab({
+        Title = "Chess",
+        Icon = "crown",
+    })
+
+    local DescriptionTab = Window:Tab({
+        Title = "Description",
+        Icon = "book-open",
+    })
+
+    ReadTab:Section({
+        Title = "PLEASE READ",
+        Icon = "triangle-alert",
+        Opened = true,
+    })
+
+    ReadTab:Paragraph({
+        Title = "Warning",
+        Desc = "please be careful while using the script if u got banned its not my fault or the bots fault its yo fault ur soo ass at chess that ur using a script.",
+        Icon = "shield-alert",
+    })
+
+    ReadTab:Paragraph({
+        Title = "Notice",
+        Desc = "Do not abuse auto play cuz auto play is bannable it doesnt mean ur gonna get banned on the game it just mean theres gonna be a tag on ur head saying ur banned if the game treats u as a cheat u can check if ur banned on the settings tab by pressing ''checkamibanned'''.",
+        Icon = "info",
+    })
+
+    ReadTab:Divider()
+
+    ReadTab:Section({
+        Title = "How to avoid?",
+        Icon = "circle-check",
+        Opened = true,
+    })
+
+    ReadTab:Paragraph({
+        Title = "Before using the script",
+        Desc = "if you dont wanna get banned i just telling you that please do not be notice that u are using an cheats cuz chess club's anti cheat is unbypassable just dont get noticed play safe.",
+        Icon = "book-open-check",
+    })
+
+    DescriptionTab:Section({
+        Title = "AI OVERVIEW",
+        Icon = "brain",
+        Opened = true,
+    })
+
+    DescriptionTab:Paragraph({
+        Title = "What the AI does",
+        Desc = "The analyzer reads the current chess position, studies legal possibilities and returns a move it considers best. The different APIs are different analysis engines with different ways of handling the same position. This tab explains their playing behavior.",
+        Icon = "scan-search",
+    })
+
+    DescriptionTab:Paragraph({
+        Title = "Important warning",
+        Desc = "No chess bot is unbeatable. The analyzer can make mistakes, miss a tactic, choose a practical move instead of a perfect one, or simply lose to a strong opponent. If your gameplay is suspected, flagged, restricted or banned by a game or platform, the result is outside the bot's control. Using the analyzer does not guarantee that an account, match or session will remain safe from detection or penalties.",
+        Icon = "triangle-alert",
+    })
+
+    DescriptionTab:Divider()
+
+    DescriptionTab:Section({
+        Title = "AI APIS",
+        Icon = "server-cog",
+        Opened = true,
+    })
+
+    DescriptionTab:Paragraph({
+        Title = "Zyrqon • Default",
+        Desc = "The default analyzer and one of the top general-purpose configurations in this build. It is intended to play in a balanced, accurate and adaptable way instead of forcing one personality. It can handle quiet positions, tactical moments and changing game phases while keeping the move selection focused on the strongest line available to it. Expected Elo: not officially rated or benchmarked in the provided files.",
+        Icon = "crown",
+    })
+
+    DescriptionTab:Paragraph({
+        Title = "Zyrqon Nova",
+        Desc = "A deeper analysis option built to spend its available thinking time carefully. Nova can keep searching through the position as time allows and is designed to compare deeper possibilities before settling on a move. Its play should feel more deliberate in positions where there are many serious alternatives. Expected Elo: not officially rated or benchmarked in the provided files.",
+        Icon = "sparkles",
+    })
+
+    DescriptionTab:Paragraph({
+        Title = "Lith",
+        Desc = "A positional-focused analyzer. It is designed to value space, useful squares, activity, structure and long-term pressure, so its moves can look calm at first while gradually improving the position. It is especially suited to positions where the plan matters more than immediately forcing a tactic. Expected Elo: not officially rated or benchmarked in the provided files.",
+        Icon = "layers",
+    })
+
+    DescriptionTab:Paragraph({
+        Title = "Null.Mini",
+        Desc = "A consistent depth-driven analyzer. Instead of changing its answer because the client happens to run faster or slower, it works toward a defined search strength and returns a repeatable result for the same position and settings. Its play is meant to be stable, structured and reliable. Expected Elo: not officially rated or benchmarked in the provided files.",
+        Icon = "shield-check",
+    })
+
+    DescriptionTab:Paragraph({
+        Title = "Muse • Top General Purpose",
+        Desc = "One of the strongest general-purpose choices in this build, alongside the default Zyrqon configuration. Muse is designed for deeper, adaptive analysis and can build a longer principal variation while reacting to tactical, positional and endgame features of the position. It can also produce useful analysis feedback when a position becomes especially tactical or deeply searched. Expected Elo: not officially rated or benchmarked in the provided files.",
+        Icon = "wand-sparkles",
+    })
+
+    DescriptionTab:Divider()
+
+    DescriptionTab:Section({
+        Title = "WHAT TO EXPECT",
+        Icon = "list-tree",
+        Opened = true,
+    })
+
+    DescriptionTab:Paragraph({
+        Title = "How they move",
+        Desc = "Zyrqon is the balanced all-rounder, Nova is the deeper time-focused analyzer, Auralith prefers long-term positional pressure, Null.Mini emphasizes repeatable depth-based decisions, and Muse is configured as a top general-purpose analyzer with deeper and more adaptive analysis.",
+        Icon = "move",
+    })
+
+    DescriptionTab:Paragraph({
+        Title = "Elo information",
+        Desc = "There is no official Elo rating stated for these APIs in the supplied engine files. Any number shown by a third-party site, match result or personal test would be a separate benchmark, not an official rating for the API. Treat the descriptions here as behavior and configuration notes rather than certified Elo levels.",
+        Icon = "gauge",
+    })
+
+    DescriptionTab:Paragraph({
+        Title = "AI Style",
+        Desc = "AI Style changes the kind of moves the analyzer prefers. Balanced aims for minimal personality bias, while styles such as Aggressive, Calm, Defensive, Tactical, Trickery, Positional and Endgame change the preference toward different types of positions and decisions.",
+        Icon = "sliders-horizontal",
+    })
+
+    DescriptionTab:Paragraph({
+        Title = "Think time",
+        Desc = "Think time controls how long the main analysis can work on the current position. More time can allow deeper analysis, but more time does not make an engine infallible and does not guarantee a better move in every position.",
+        Icon = "timer",
+    })
+
+    DescriptionTab:Paragraph({
+        Title = "Best move vs. perfect move",
+        Desc = "The highlighted move is the move returned by the selected analyzer after its available search. It should be treated as an engine recommendation, not a promise that the move is objectively perfect or that an opponent cannot refute it.",
+        Icon = "target",
+    })
+
+    local SettingsTab = Window:Tab({
+        Title = "Settings",
+        Icon = "settings",
+    })
+
+    ChessTab:Section({
+        Title = "Analysis",
+        Icon = "scan-search",
+        Opened = true,
+    })
+
+    local status = ChessTab:Paragraph({
+        Title = "STATUS",
+        Desc = "Ready • start or join a chess game",
+        Icon = "activity",
+    })
+
+    ChessTab:Divider()
+
+    ChessTab:Section({
+        Title = "Analysis Core",
+        Icon = "cpu",
+        Opened = true,
+    })
+
+    local function addToggle(key, title, desc, icon)
+        ChessTab:Toggle({
+            Title = title,
+            Desc = desc,
+            Icon = icon,
+            Type = "Toggle",
+            Value = State[key] == true,
+            Callback = function(value)
+                State[key] = value == true
+
+                if key == "HighlightBestMove" or key == "ShowLastMove" or key == "ShowBoardOverlay" then
+                    State.BoardSignature = nil
+                    refreshBoardOverlay()
+                elseif key == "AutoAnalyze" and State[key] and State.FEN then
+                    State.TryMove(true)
+                elseif key == "SecondChoices" and State[key] and State.FEN then
+                    State.TryMove(true)
+                elseif key == "SmartAnalysis" and State[key] and State.FEN then
+                    State.TryMove(true)
+                elseif key == "Enabled" and State[key] and State.FEN then
+                    State.TryMove(true)
+                end
+
+                updateStatus()
+                updateInfo()
+            end,
+        })
+    end
+
+    addToggle("Enabled", "Analysis", "Master switch for the chess analyzer", "power")
+    addToggle("AutoPlay", "Auto play", "Submit the AI move automatically", "play")
+    addToggle("AutoAnalyze", "Auto analysis", "Recalculate after every new position", "scan-search")
+    addToggle("SmartAnalysis", "Smart analysis", "Recheck the AI move against serious alternatives and only switch when the evidence is strong", "brain")
+    addToggle("SecondChoices", "Second Choices", "Expose the deeper candidate comparison instead of relying only on the primary AI line", "git-compare")
+    addToggle("HighlightBestMove", "Best move highlight", "Mark source and destination without an arrow", "target")
+    addToggle("ShowBoardOverlay", "Board overlay", "Keep markers attached to the detected board", "square-stack")
+    addToggle("ShowLastMove", "Last move", "Show the previous move on the board", "history")
+    addToggle("ShowEvaluation", "Evaluation", "Show the AI score in analysis", "gauge")
+    addToggle("ShowFEN", "FEN details", "Show the current board position string", "code")
+    addToggle("NovaPersonalityEnabled", "Nova personality", "Let Zyrqon Nova react to notable moves with chess-style callouts", "sparkles")
+
+    ChessTab:Divider()
+
+    ChessTab:Section({
+        Title = "Search",
+        Icon = "timer",
+        Opened = true,
+    })
+
+    local timeValues = {"0.75s", "1.5s", "2.5s", "4.0s", "6.0s"}
+    local selectedTime = tostring(State.SearchTime) .. "s"
+
+    ChessTab:Dropdown({
+        Title = "Think time",
+        Desc = "How long " .. ANALYZER_NAME .. " studies the current position",
+        Icon = "timer",
+        Values = timeValues,
+        Value = selectedTime,
+        Callback = function(value)
+            local parsed = tonumber(tostring(value):match("([%d%.]+)"))
+            if parsed then
+                State.SearchTime = parsed
+                if State.FEN then
+                    State.TryMove(true)
+                end
+            end
+        end,
+    })
+
+    local styleValues = {
+        "Balanced",
+        "Aggressive",
+        "Calm",
+        "Defensive",
+        "Tactical",
+        "Trickery",
+        "Positional",
+        "Endgame",
+        "Alien Gambit",
+        "Willy Alien",
+    }
+
+    ChessTab:Dropdown({
+        Title = "AI API",
+        Desc = "Selects the analysis API used for move generation.",
+        Icon = "server-cog",
+        Values = API_NAMES,
+        Value = State.APIName,
+        Callback = function(value)
+            local apiName = tostring(value)
+            if not setActiveAPI(apiName, false) then
+                if ActiveAPIName == "Zyrqon Nova" then
+                    State.APIName = "Zyrqon Nova"
+                elseif ActiveAPIName == "Lith" then
+                    State.APIName = "Lith"
+                elseif ActiveAPIName == "Null.Mini" then
+                    State.APIName = "Null.Mini"
+                elseif ActiveAPIName == "Muse" then
+                    State.APIName = "Muse"
+                elseif ActiveAPI then
+                    State.APIName = "Zyrqon"
+                end
+                updateInfo()
+                return
+            end
+            State.APIName = apiName
+            State.AnalysisToken += 1
+            State.Running = false
+            State.BestMove = nil
+            State.BestScore = nil
+            State.SecondChoiceMove = nil
+            State.SecondChoiceReply = nil
+            State.SecondChoiceScore = nil
+            State.SecondChoiceLines = {}
+            State.NovaReaction = nil
+            State.NovaNoticeToken = 0
+            pcall(clearBestMoveTileMarkers)
+            if State.FEN then
+                State.TryMove(true)
+            else
+                updateInfo()
+            end
+        end,
+    })
+
+    ChessTab:Dropdown({
+        Title = "AI Style",
+        Desc = "Changes how the AI ranks verified alternatives and changes the best-move highlight theme.",
+        Icon = "brain",
+        Values = styleValues,
+        Value = State.AIStyle,
+        Callback = function(value)
+            local style = tostring(value)
+            if State.AIStyles[style] then
+                setAIStyle(style)
+                pcall(function()
+                    if ActiveAPI and ActiveAPI.SetStyle then
+                        ActiveAPI:SetStyle(style)
+                    end
+                end)
+                pcall(function()
+                    setElementContent(State.StyleParagraph, "AI STYLE", getAIProfile().Description)
+                end)
+                pcall(clearBestMoveTileMarkers)
+                updateStatus()
+                updateInfo()
+            end
+        end,
+    })
+
+    State.StyleParagraph = ChessTab:Paragraph({
+        Title = "AI STYLE",
+        Desc = getAIProfile().Description,
+        Icon = "sparkles",
+    })
+
+    ChessTab:Button({
+        Title = "Analyze Now",
+        Desc = "Force a fresh AI analysis",
+        Icon = "scan-search",
+        Callback = function()
+            State.TryMove(true)
+        end,
+    })
+
+    ChessTab:Button({
+        Title = "Clear Markers",
+        Desc = "Remove the current best/last move indicators",
+        Icon = "eraser",
+        Callback = function()
+            State.BestMove = nil
+            State.BestScore = nil
+            State.BoardSignature = nil
+            clearHighlights()
+            updateStatus()
+            updateInfo()
+        end,
+    })
+
+    ChessTab:Divider()
+
+    local info = ChessTab:Paragraph({
+        Title = "API DETAILS",
+        Desc = "You: Unknown\nAPI: " .. (ActiveAPI and ActiveAPIName or "Unavailable") .. "\nBest move: —\nScore: —\nThink time: " .. tostring(State.SearchTime) .. "s",
+        Icon = "list-tree",
+    })
+
+    local fenLabel = ChessTab:Paragraph({
+        Title = "FEN",
+        Desc = "Hidden",
+        Icon = "code-2",
+    })
+
+    SettingsTab:Section({
+        Title = "Window",
+        Icon = "panel-top",
+        Opened = true,
+    })
+
+    local WindowKeybind = SettingsTab:Keybind({
+        Title = "Open / Close Keybind",
+        Desc = "Change the key used to toggle Chess Analyzer",
+        Value = DEFAULT_KEY,
+        Callback = function(value)
+            if type(value) ~= "string" then
+                return
+            end
+
+            local key = value:upper()
+            if not Enum.KeyCode[key] then
+                return
+            end
+
+            pcall(function()
+                Window:SetToggleKey(Enum.KeyCode[key])
+            end)
+
+            CurrentKey = key
+        end,
+    })
+
+    SettingsTab:Button({
+        Title = "Reset Keybind",
+        Desc = "Reset the open/close key to K",
+        Icon = "rotate-ccw",
+        Callback = function()
+            pcall(function()
+                Window:SetToggleKey(Enum.KeyCode.K)
+            end)
+            pcall(function()
+                WindowKeybind:Set("K")
+            end)
+            CurrentKey = "K"
+        end,
+    })
+
+    SettingsTab:Section({
+        Title = "Player",
+        Icon = "user-round-check",
+        Opened = true,
+    })
+
+    local AmIBannedStatus = SettingsTab:Paragraph({
+        Title = "AMIBANNED STATUS",
+        Desc = "Press the button below to check whether the game currently treats this account as banned.",
+        Icon = "shield-check",
+    })
+
+    SettingsTab:Button({
+        Title = "Check amibanned",
+        Desc = "Check your current rating ban state and reveal the Banned tag when confirmed.",
+        Icon = "shield-check",
+        Callback = function()
+            State.AmIBanned = true
+            State.AmIBannedToken = (State.AmIBannedToken or 0) + 1
+
+            setElementContent(
+                AmIBannedStatus,
+                "AMIBANNED STATUS",
+                "Checking your current ban state..."
+            )
+
+            local okState, reason = State.RefreshAmIBanned()
+
+            if okState == true then
+                local message = "Sorry to hear this, but yes, you are treated as a banned by the game."
+                setElementContent(
+                    AmIBannedStatus,
+                    "AMIBANNED STATUS • BANNED",
+                    message
+                )
+                Notify("amibanned", message, "shield-alert", 5, true)
+            elseif okState == false then
+                local message = "You are not banned."
+                setElementContent(
+                    AmIBannedStatus,
+                    "AMIBANNED STATUS • NOT BANNED",
+                    message
+                )
+                Notify("amibanned", message, "shield-check", 4, true)
+            else
+                local message = "The game is not treating this client as banned."
+                setElementContent(
+                    AmIBannedStatus,
+                    "AMIBANNED STATUS • Not banned",
+                    message
+                )
+                Notify("amibanned", message, "search", 4, true)
+            end
+        end,
+    })
+
+    SettingsTab:Divider()
+
+    SettingsTab:Section({
+        Title = "Theme",
+        Icon = "palette",
+        Opened = true,
+    })
+
+    SettingsTab:Dropdown({
+        Title = "Theme",
+        Desc = "Choose the WindUI glass theme",
+        Icon = "palette",
+        Values = {
+            "Willow Rose",
+            "Willow Noir",
+            "Willow Crimson",
+            "Willow Midnight",
+            "Willow Violet",
+            "Willow Ocean",
+            "Willow Emerald",
+            "Willow Ember",
+        },
+        Value = DEFAULT_THEME,
+        Callback = function(value)
+            if not Themes[value] then
+                return
+            end
+
+            CurrentTheme = value
+
+            pcall(function()
+                WindUI:SetTheme(value)
+            end)
+            Notify("Theme Changed", value .. " applied.", "palette", 3)
+        end,
+    })
+
+    SettingsTab:Paragraph({
+        Title = "Interface",
+        Desc = "WindUI acrylic glass with the original Chess Analyzer controls and a stable board overlay.",
+        Icon = "sparkles",
+    })
+
+    State.Gui = Window
+    State.Status = status
+    State.Info = info
+    State.FENLabel = fenLabel
+    State.Minimize = nil
+    State.VersionTag = VersionTag
+    State.EngineTag = EngineTag
+
+    State.Overlay = create("Frame", {
+        Name = "ChessBestMoveOverlay",
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Position = UDim2.fromScale(0, 0),
+        Size = UDim2.fromScale(1, 1),
+        Visible = true,
+        Active = false,
+        ZIndex = 1000,
+        ClipsDescendants = false,
+    }, nil)
+
+    makePersistentHighlight("LastFrom")
+    makePersistentHighlight("LastTo")
+    makePersistentHighlight("BestFrom")
+    makePersistentHighlight("BestTo")
+
+    local overlayClock = 0
+    State.BoardConn = RunService.RenderStepped:Connect(function(dt)
+        overlayClock += dt
+        if overlayClock < 0.20 then
+            return
+        end
+        overlayClock = 0
+
+        if State.ShowBoardOverlay and (State.HighlightBestMove or State.ShowLastMove) then
+            refreshBoardOverlay()
+        end
+    end)
+
+    State.FPS = 0
+    State.FPSSamples = 0
+    State.FPSClock = 0
+
+    State.FPSConn = RunService.RenderStepped:Connect(function(dt)
+        State.FPSSamples += 1
+        State.FPSClock += dt
+        if State.FPSClock >= 1 then
+            State.FPS = State.FPSSamples
+            State.FPSSamples = 0
+            State.FPSClock = 0
+            pcall(function()
+                if EngineTag and EngineTag.SetTitle then
+                    EngineTag:SetTitle((ActiveAPI and ("API: " .. ActiveAPIName) or "API: OFFLINE") .. " • " .. tostring(State.FPS) .. " FPS")
+                end
+            end)
+        end
+    end)
+
+    table.insert(State.Conns, State.FPSConn)
+
+end
+
+local function updateInfo()
+
+    local engineName = ActiveAPI and ActiveAPIName or "Unavailable"
+    local moveText = State.BestMove or "—"
+    local scoreText = State.ShowEvaluation and shortScore(State.BestScore) or "hidden"
+    local mineSide = localSide()
+    local sideText = mineSide == "w" and "White" or mineSide == "b" and "Black" or "Unknown"
+    local novaReactionText = ""
+    if ActiveAPIName == "Zyrqon Nova" and type(State.NovaReaction) == "table" and State.NovaReaction.tag then
+        novaReactionText = "\nNova reaction: " .. tostring(State.NovaReaction.tag)
+    end
+
+    if State.Info then
+        setElementContent(
+            State.Info,
+            "API DETAILS",
+            "You: " .. sideText
+                .. "\nAPI: " .. engineName
+                .. "\nBest move: " .. moveText
+                .. "\nScore: " .. scoreText
+                .. "\nAI style: " .. tostring(State.AIStyle)
+                .. "\nThink time: " .. tostring(State.SearchTime) .. "s"
+                .. novaReactionText
+                .. (State.AIStyle == "Alien Gambit" and "\nMode: Caro-Kann Alien Gambit" or "")
+        )
+    end
+
+    if State.FENLabel then
+        setElementContent(
+            State.FENLabel,
+            "FEN",
+            State.ShowFEN and (State.FEN or "—") or "Hidden"
+        )
+    end
+end
+
+local function setFENSide(fen, side)
+
+    if type(fen) ~= "string" or (side ~= "w" and side ~= "b") then
+        return fen
+    end
+
+    local fields = {}
+    for field in fen:gmatch("%S+") do
+        fields[#fields + 1] = field
+    end
+
+    if #fields < 2 then
+        return fen
+    end
+
+    fields[2] = side
+
+    return table.concat(fields, " ")
+
+end
+
+local function getLiveTurnSide(gameClient, mine)
+
+    if gameClient and type(gameClient.WhiteToPlay) == "boolean" then
+        return gameClient.WhiteToPlay and "w" or "b"
+    end
+
+    local fenSide = activeColor()
+    if fenSide == "w" or fenSide == "b" then
+        return fenSide
+    end
+
+    return mine
+
+end
+
+function State.TryMove(forceAnalysis)
+
+    if not State.ReadAccepted then
+        return
+    end
+
+    local liveClient = getLiveChessGameClient()
+
+    if liveClient and type(liveClient.AmIWhite) == "boolean" then
+        State.LocalSideOverride = liveClient.AmIWhite and "w" or "b"
+    end
+
+    if not State.Enabled or State.Running or not State.FEN or not State.GameID then
+        return
+    end
+
+    if not forceAnalysis and not State.AutoAnalyze and not State.AutoPlay then
+        return
+    end
+
+    if liveClient and type(liveClient.FEN) == "string" and liveClient.FEN ~= "" then
+        State.FEN = liveClient.FEN
+    end
+
+    local mine = liveClient and type(liveClient.AmIWhite) == "boolean" and (liveClient.AmIWhite and "w" or "b") or localSide()
+    local turnSide = getLiveTurnSide(liveClient, mine)
+
+    if mine ~= "w" and mine ~= "b" then
+        updateStatus()
+        return
+    end
+
+    if turnSide ~= mine then
+        updateStatus()
+        return
+    end
+
+    local fen = setFENSide(State.FEN, turnSide)
+    local token = State.AnalysisToken + 1
+    State.AnalysisToken = token
+    State.Running = true
+    State.BestMove = nil
+    State.BestScore = nil
+    State.AnalysisSide = turnSide
+    State.AnalysisFEN = fen
+    State.SecondChoiceMove = nil
+    State.SecondChoiceReply = nil
+    State.SecondChoiceScore = nil
+    State.SecondChoiceLines = {}
+    State.NovaReaction = nil
+
+    if State.AIStyle == "Willy Alien" then
+        pcall(setStatus, "Willy Alien • deep search • unusual move scan • " .. tostring(State.SearchTime) .. "s")
+    elseif State.AIStyle == "Alien Gambit" then
+        pcall(setStatus, "Alien Gambit • Caro-Kann attack • " .. tostring(State.SearchTime) .. "s")
+    else
+        pcall(setStatus, "Analyzing " .. tostring(State.AIStyle or "Balanced") .. " • " .. tostring(State.SearchTime) .. "s")
+    end
+    pcall(updateInfo)
+    pcall(clearHighlights)
+    clearBestMoveTileMarkers()
+
+    task.delay(math.max(8, State.SearchTime * 6 + 2), function()
+        if State.Running and State.AnalysisToken == token and State.AnalysisFEN == fen then
+            State.Running = false
+            State.AnalysisToken += 1
+            State.BestMove = nil
+            State.BestScore = nil
+            pcall(setStatus, "Analysis timed out • retrying is safe")
+            pcall(updateInfo)
+            pcall(refreshBoardOverlay)
+        end
+    end)
+
+    task.spawn(function()
+        local okTask, taskError = xpcall(function()
+            local move
+            local score
+
+            if ActiveAPI and ActiveAPI.GetBestMoveFromFEN then
+                local engineDone = false
+                local engineMove = nil
+                local engineScore = nil
+                task.spawn(function()
+                    local ok, a, b, c = pcall(function()
+                        return ActiveAPI:GetBestMoveFromFEN(fen, State.SearchTime)
+                    end)
+                    if ok then
+                        engineMove = a
+                        engineScore = b
+                        State.NovaReaction = c
+                    end
+                    engineDone = true
+                end)
+
+                local deadline = os.clock() + math.max(4, State.SearchTime + 2.5)
+                while not engineDone and os.clock() < deadline do
+                    if token ~= State.AnalysisToken then
+                        return
+                    end
+                    task.wait(0.05)
+                end
+
+                if engineDone then
+                    move = engineMove
+                    score = engineScore
+                end
+            end
+
+            if token ~= State.AnalysisToken then
+                State.Running = false
+                return
+            end
+
+            if not move then
+                move = fallbackMove(fen)
+            end
+
+            if State.AIStyle == "Alien Gambit" then
+                local alienPlanMove = getAlienGambitPlanMove(fen)
+                if alienPlanMove then
+                    move = alienPlanMove
+                    score = nil
+                    pcall(setStatus, "Alien Gambit plan • " .. tostring(move))
+                end
+            end
+
+            local moveFrom = type(move) == "string" and move:sub(1, 2) or nil
+            local sourcePiece = moveFrom and fenPieceAt(fen, moveFrom) or nil
+            local sourceSide = sourcePiece and (sourcePiece:match("%u") and "w" or "b") or nil
+
+            if sourceSide ~= turnSide then
+                State.Running = false
+                State.BestMove = nil
+                State.BestScore = nil
+                pcall(clearBestMoveTileMarkers)
+                pcall(setStatus, "AI returned opponent move • rejected")
+                pcall(updateInfo)
+                pcall(refreshBoardOverlay)
+                return
+            end
+
+            if token ~= State.AnalysisToken then
+                State.Running = false
+                return
+            end
+
+            local selectedMove = move
+            local choiceReply
+            local choiceScore
+            local choiceLines = {}
+            local externalEngineOwnsSearch = ActiveAPIName == "Zyrqon Nova"
+                or ActiveAPIName == "Lith"
+                or ActiveAPIName == "Null.Mini"
+                or ActiveAPIName == "Muse"
+
+            if (State.SmartAnalysis or State.SecondChoices or State.AIStyle ~= "Balanced") and move and not externalEngineOwnsSearch then
+                if State.SmartAnalysis or State.AIStyle ~= "Balanced" then
+                    pcall(setStatus, "Smart analysis • checking alternatives...")
+                else
+                    pcall(setStatus, "Thinking through second choices...")
+                end
+                selectedMove, choiceReply, choiceScore, choiceLines = smartChoicePlan(fen, move, token)
+            end
+
+            if token ~= State.AnalysisToken then
+                State.Running = false
+                return
+            end
+
+            local finalMove = selectedMove or move
+            local finalFrom = type(finalMove) == "string" and finalMove:sub(1, 2) or nil
+            local finalPiece = finalFrom and fenPieceAt(fen, finalFrom) or nil
+            local finalSide = finalPiece and (finalPiece:match("%u") and "w" or "b") or nil
+
+            if finalSide ~= turnSide then
+                State.Running = false
+                State.BestMove = nil
+                State.BestScore = nil
+                pcall(clearBestMoveTileMarkers)
+                pcall(setStatus, "Best move validation failed")
+                pcall(updateInfo)
+                pcall(refreshBoardOverlay)
+                return
+            end
+
+            State.BestMove = finalMove
+            State.BestScore = finalMove == move and score or (choiceScore or score)
+
+            if ActiveAPIName == "Zyrqon Nova"
+                and State.NovaPersonalityEnabled
+                and type(State.NovaReaction) == "table"
+                and State.NovaReaction.notify == true
+                and State.NovaNoticeToken ~= token then
+                State.NovaNoticeToken = token
+                local reactionTag = tostring(State.NovaReaction.tag or "NOVA")
+                local reactionMessage = tostring(State.NovaReaction.message or "Nova found something interesting.")
+                local reactionIcon = tostring(State.NovaReaction.icon or "sparkles")
+                pcall(Notify, "Zyrqon Nova • " .. reactionTag, reactionMessage, reactionIcon, 4)
+            end
+            State.AnalysisSide = turnSide
+            State.AnalysisFEN = fen
+            State.SecondChoiceMove = finalMove
+            State.SecondChoiceReply = choiceReply
+            State.SecondChoiceScore = choiceScore
+            State.SecondChoiceLines = choiceLines or {}
+
+            local liveNow = getLiveChessGameClient()
+            if liveNow and type(liveNow.FEN) == "string" and liveNow.FEN ~= "" then
+                State.FEN = liveNow.FEN
+            end
+
+            local nowSide = getLiveTurnSide(liveNow, mine)
+            if nowSide ~= mine then
+                State.Running = false
+                pcall(updateStatus)
+                pcall(updateInfo)
+                pcall(refreshBoardOverlay)
+                return
+            end
+
+            pcall(updateInfo)
+            pcall(refreshBoardOverlay)
+            if State.Enabled and State.AutoPlay and finalMove then
+                local submitOK = false
+                local submitWorked, submitResult = pcall(function()
+                    return State.SubmitMove(finalMove)
+                end)
+                submitOK = submitWorked and submitResult == true
+
+                if submitOK then
+                    if State.SecondChoices and choiceReply then
+                        pcall(setStatus, "Played " .. finalMove .. " • expecting " .. choiceReply)
+                    else
+                        pcall(setStatus, "Played " .. finalMove)
+                    end
+                else
+                    pcall(setStatus, "Move found • submit failed")
+                end
+            else
+                local detail = finalMove or "—"
+                if State.SecondChoices and choiceReply then
+                    detail ..= " • reply " .. choiceReply
+                end
+                pcall(setStatus, "Best move ready • " .. detail)
+            end
+        end, function(err)
+            return tostring(err)
+        end)
+
+        State.Running = false
+
+        if not okTask then
+            State.BestMove = nil
+            State.BestScore = nil
+            pcall(setStatus, "Analysis error • retrying is safe")
+        end
+
+        pcall(updateInfo)
+        pcall(refreshBoardOverlay)
+    end)
+end
+
+function State.SubmitMove(move)
+    if not State.GameID or not move then
+        return false
+    end
+    if not move:match("^[a-h][1-8][a-h][1-8][qrbn]?$") then
+        return false
+    end
+    local ChessRemotes = getChessRemotes()
+    if not ChessRemotes then
+        return false
+    end
+
+    local ok, remotes = pcall(function()
+        return ChessRemotes(State.GameID)
+    end)
+
+    if not ok or not remotes or not remotes.SubmitMove then
+        return false
+    end
+
+    local activeAtSend = State.FEN
+    remotes.SubmitMove:FireServer(move)
+    State.LastMove = move
+    State.LastSentFEN = activeAtSend
+    State.MoveNumber += 1
+    refreshBoardOverlay()
+    return true
+end
+
+local function attachGame(gameData)
+    if type(gameData) ~= "table" then
+        return
+    end
+    if not gameData.gameID or not gameData.fen then
+        return
+    end
+    disconnectList(State.GameConns)
+    State.GameID = gameData.gameID or gameData.GameID
+    State.FEN = gameData.fen or gameData.FEN
+    State.WhiteName = gameData.whiteName or gameData.WhiteName or gameData.whitePlayer or gameData.WhitePlayer or gameData.whiteUser or gameData.WhiteUser or gameData.whiteRef or gameData.WhiteRef
+    State.BlackName = gameData.blackName or gameData.BlackName or gameData.blackPlayer or gameData.BlackPlayer or gameData.blackUser or gameData.BlackUser or gameData.blackRef or gameData.BlackRef
+    State.LocalSideOverride = resolveLocalSide(gameData)
+    State.BoardOrientation = nil
+    State.Running = false
+    State.MoveNumber = 0
+    State.LastMove = nil
+    State.BestMove = nil
+    State.BestScore = nil
+    State.AnalysisToken += 1
+    local ChessRemotes = getChessRemotes()
+    if not ChessRemotes then
+        setStatus("Chess remotes unavailable.")
+        return
+    end
+    local ok, remotes = pcall(function()
+        return ChessRemotes(State.GameID)
+    end)
+    if not ok or not remotes then
+        setStatus("Couldn't attach to game.")
+        return
+    end
+    if remotes.MoveMade then
+        table.insert(State.GameConns, remotes.MoveMade.OnClientEvent:Connect(function(newFEN)
+                        clearBestMoveTileMarkers()
+            State.FEN = newFEN
+            State.Running = false
+            State.BestMove = nil
+            State.BestScore = nil
+            State.AnalysisSide = nil
+            State.AnalysisFEN = nil
+            State.SecondChoiceMove = nil
+            State.SecondChoiceReply = nil
+            State.SecondChoiceScore = nil
+            State.SecondChoiceLines = {}
+            State.AnalysisToken += 1
+            updateStatus()
+            updateInfo()
+            refreshBoardOverlay()
+            if State.AutoAnalyze or State.AutoPlay then
+                task.defer(function()
+                    State.TryMove(false)
+                end)
+            end
+        end))
+    end
+    if remotes.GameEnded then
+        table.insert(State.GameConns, remotes.GameEnded.OnClientEvent:Connect(function()
+            State.GameID = nil
+                        clearBestMoveTileMarkers()
+            State.FEN = nil
+            State.WhiteName = nil
+            State.BlackName = nil
+            State.LocalSideOverride = nil
+            State.BoardOrientation = nil
+            State.Running = false
+            State.BestMove = nil
+            State.BestScore = nil
+            State.AnalysisSide = nil
+            State.AnalysisFEN = nil
+            State.SecondChoiceMove = nil
+            State.SecondChoiceReply = nil
+            State.SecondChoiceScore = nil
+            State.SecondChoiceLines = {}
+            State.AnalysisToken += 1
+            updateStatus()
+            updateInfo()
+            refreshBoardOverlay()
+        end))
+    end
+
+    updateStatus()
+    updateInfo()
+    refreshBoardOverlay()
+    if State.AutoAnalyze or State.AutoPlay then
+        task.defer(function()
+            State.TryMove(false)
+        end)
+    end
+end
+function State.Destroy()
+
+    State.PulseToken = (State.PulseToken or 0) + 1
+    State.AmIBannedToken = (State.AmIBannedToken or 0) + 1
+    State.AmIBanned = false
+    destroyAmIBannedGui()
+    if State.ReadWarningGui then
+        pcall(function()
+            State.ReadWarningGui:Destroy()
+        end)
+        State.ReadWarningGui = nil
+    end
+    State.ReadAccepted = false
+    State.Enabled = false
+    State.Running = false
+    State.AnalysisToken += 1
+    disconnectList(State.Conns)
+    disconnectList(State.GameConns)
+    if State.BoardConn then
+        pcall(function()
+            State.BoardConn:Disconnect()
+        end)
+        State.BoardConn = nil
+    end
+    if State.FPSConn then
+     pcall(function()
+            State.FPSConn:Disconnect()
+        end)
+        State.FPSConn = nil
+    end
+    if State.Gui then
+        closeWindUIWindow(State.Gui)
+    end
+    if State.Overlay then
+        pcall(function()
+            State.Overlay:Destroy()
+        end)
+    end
+    _G.__CHESS_AUTOBOT = nil
+end
+makeUI()
+showReadWarning()
+local ChessRemotes = getChessRemotes()
+if ChessRemotes then
+    local ok, globalRemotes = pcall(function()
+        return ChessRemotes()
+    end)
+    if ok and globalRemotes and globalRemotes.GameStarted then
+        table.insert(State.Conns, globalRemotes.GameStarted.OnClientEvent:Connect(function(gameData)
+            attachGame(gameData)
+        end))
+    end
+end
+local function attachCurrentGame()
+    local playerScripts = LocalPlayer:FindFirstChildOfClass("PlayerScripts")
+    if not playerScripts then
+        return
+    end
+    local proxyModule = findDescendant(playerScripts, "ChessProxyService")
+    if not proxyModule or not proxyModule:IsA("ModuleScript") then
+        return
+    end
+    local ok, proxy = pcall(require, proxyModule)
+    if not ok or type(proxy) ~= "table" then
+        return
+    end
+    local gameClient = proxy.ChessGame
+    if type(gameClient) == "table" and (gameClient.GameID or gameClient.gameID) and (gameClient.FEN or gameClient.fen) then
+        if type(gameClient.AmIWhite) == "boolean" then
+            State.LocalSideOverride = gameClient.AmIWhite and "w" or "b"
+        end
+        attachGame({
+            gameID = gameClient.GameID or gameClient.gameID,
+            AmIWhite = gameClient.AmIWhite,
+            fen = gameClient.FEN or gameClient.fen,
+            whiteName = gameClient.WhiteName or gameClient.whiteName or gameClient.WhitePlayer or gameClient.whitePlayer or gameClient.WhiteUser or gameClient.whiteUser,
+            blackName = gameClient.BlackName or gameClient.blackName or gameClient.BlackPlayer or gameClient.blackPlayer or gameClient.BlackUser or gameClient.blackUser,
+            whiteRating = gameClient.WhiteRating or gameClient.whiteRating or gameClient.WhiteElo or gameClient.whiteElo,
+            blackRating = gameClient.BlackRating or gameClient.blackRating or gameClient.BlackElo or gameClient.blackElo,
+            whiteClock = gameClient.WhiteClock or gameClient.whiteClock or gameClient.WhiteTime or gameClient.whiteTime,
+            blackClock = gameClient.BlackClock or gameClient.blackClock or gameClient.BlackTime or gameClient.blackTime,
+            timeControl = gameClient.TimeControl or gameClient.timeControl,
+            LocalSide = gameClient.LocalSide or gameClient.localSide or gameClient.PlayerSide or gameClient.playerSide or gameClient.MySide or gameClient.mySide or gameClient.PlayerColor or gameClient.playerColor or gameClient.MyColor or gameClient.myColor or gameClient.Side or gameClient.side or gameClient.Color or gameClient.color or gameClient.ChessColor or gameClient.chessColor,
+            IsWhite = gameClient.IsWhite,
+            isWhite = gameClient.isWhite,
+            YouAreWhite = gameClient.YouAreWhite,
+            youAreWhite = gameClient.youAreWhite,
+            IsBlack = gameClient.IsBlack,
+            isBlack = gameClient.isBlack,
+            YouAreBlack = gameClient.YouAreBlack,
+            youAreBlack = gameClient.youAreBlack,
+            White = gameClient.White,
+            white = gameClient.white,
+            Black = gameClient.Black,
+            black = gameClient.black,
+        })
+    end
+end
+
+task.defer(attachCurrentGame)
+task.spawn(function()
+    while State.Gui do
+        task.wait(0.75)
+        local playerScripts = LocalPlayer:FindFirstChildOfClass("PlayerScripts")
+        local proxyModule = playerScripts and findDescendant(playerScripts, "ChessProxyService")
+        if proxyModule and proxyModule:IsA("ModuleScript") then
+            local ok, proxy = pcall(require, proxyModule)
+            local gameClient = ok and type(proxy) == "table" and proxy.ChessGame or nil
+
+            if type(gameClient) == "table" then
+                local liveGameID = gameClient.GameID or gameClient.gameID
+                local liveFen = gameClient.FEN or gameClient.fen
+
+                if liveGameID and type(liveFen) == "string" and liveFen ~= "" then
+
+                    local liveData = {
+                        gameID = liveGameID,
+                        fen = liveFen,
+                        AmIWhite = gameClient.AmIWhite,
+                        whiteName = gameClient.WhiteName or gameClient.whiteName or gameClient.WhitePlayer or gameClient.whitePlayer or gameClient.WhiteUser or gameClient.whiteUser or gameClient.White or gameClient.white,
+                        blackName = gameClient.BlackName or gameClient.blackName or gameClient.BlackPlayer or gameClient.blackPlayer or gameClient.BlackUser or gameClient.blackUser or gameClient.Black or gameClient.black,
+                        whiteRating = gameClient.WhiteRating or gameClient.whiteRating or gameClient.WhiteElo or gameClient.whiteElo,
+                        blackRating = gameClient.BlackRating or gameClient.blackRating or gameClient.BlackElo or gameClient.blackElo,
+                        whiteClock = gameClient.WhiteClock or gameClient.whiteClock or gameClient.WhiteTime or gameClient.whiteTime,
+                        blackClock = gameClient.BlackClock or gameClient.blackClock or gameClient.BlackTime or gameClient.blackTime,
+                        timeControl = gameClient.TimeControl or gameClient.timeControl,
+                        LocalSide = gameClient.LocalSide or gameClient.localSide or gameClient.PlayerSide or gameClient.playerSide or gameClient.MySide or gameClient.mySide or gameClient.PlayerColor or gameClient.playerColor or gameClient.MyColor or gameClient.myColor or gameClient.Side or gameClient.side or gameClient.Color or gameClient.color or gameClient.ChessColor or gameClient.chessColor,
+                        IsWhite = gameClient.IsWhite,
+                        isWhite = gameClient.isWhite,
+                        YouAreWhite = gameClient.YouAreWhite,
+                        youAreWhite = gameClient.youAreWhite,
+                        IsBlack = gameClient.IsBlack,
+                        isBlack = gameClient.isBlack,
+                        YouAreBlack = gameClient.YouAreBlack,
+                        youAreBlack = gameClient.youAreBlack,
+                        White = gameClient.White,
+                        white = gameClient.white,
+                        Black = gameClient.Black,
+                        black = gameClient.black,
+                    }
+
+                    if not State.GameID or State.GameID ~= liveGameID then
+                        pcall(attachGame, liveData)
+                    else
+                        local changedFen = State.FEN ~= liveFen
+                        local side = type(gameClient.AmIWhite) == "boolean" and (gameClient.AmIWhite and "w" or "b") or resolveLocalSide(liveData)
+
+                        if side and side ~= State.LocalSideOverride then
+                            State.LocalSideOverride = side
+                            State.BoardSignature = nil
+                        end
+
+                        if changedFen then
+                                                        clearBestMoveTileMarkers()
+                            State.FEN = liveFen
+                            State.Running = false
+                            State.BestMove = nil
+                            State.BestScore = nil
+                            State.SecondChoiceMove = nil
+                            State.SecondChoiceReply = nil
+                            State.SecondChoiceScore = nil
+                            State.SecondChoiceLines = {}
+                            State.AnalysisToken += 1
+                        end
+
+                        if liveData.whiteName ~= nil then
+                            State.WhiteName = liveData.whiteName
+                        end
+                        if liveData.blackName ~= nil then
+                            State.BlackName = liveData.blackName
+                        end
+
+                        if changedFen or side then
+                            updateStatus()
+                            updateInfo()
+                            refreshBoardOverlay()
+                        end
+
+                        if changedFen and (State.AutoAnalyze or State.AutoPlay) then
+                            task.defer(function()
+                                State.TryMove(false)
+                            end)
+                        end
+                    end
+                end
+            end
+        elseif not State.GameID then
+            pcall(attachCurrentGame)
+        end
+    end
+end)
+
+setStatus("Ready • start or join a chess game")
+
+updateInfo()

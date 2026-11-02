@@ -1,0 +1,941 @@
+--[[
+    ╔═══════════════════════════════════════════╗
+    ║          ARTEMIS V14 - FULL SUITE         ║
+    ║   Silent Aim • ESP • Anti-Aim • Aimbot    ║
+    ╚═══════════════════════════════════════════╝
+]]
+
+-- ═══════════════════════════════════════
+-- CLEANUP PREVIOUS INSTANCE
+-- ═══════════════════════════════════════
+local genv = (getgenv and getgenv()) or _G
+if genv.ARTEMIS_CLEANUP then
+    pcall(genv.ARTEMIS_CLEANUP)
+    task.wait(0.1)
+end
+
+-- ═══════════════════════════════════════
+-- SERVICES
+-- ═══════════════════════════════════════
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- ═══════════════════════════════════════
+-- REMOTE
+-- ═══════════════════════════════════════
+local ShootRemote = nil
+pcall(function()
+    ShootRemote = game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 10):WaitForChild("GunRemotes", 10):WaitForChild("ShootRemote", 10)
+end)
+
+-- ═══════════════════════════════════════
+-- CONFIG
+-- ═══════════════════════════════════════
+local Config = {
+    Enabled = true,
+    ShowFOV = true,
+    FOV = 250,
+    MaxDistance = 1000,
+    TeamCheck = true,
+    AimPart = "Head",
+    VisualCheck = true,
+
+    AimbotEnabled = false,
+    AimSmooth = 25,
+
+    SilentAimEnabled = false,
+    SilentAimDebug = false,
+
+    NoSpread = false,
+
+    TriggerbotEnabled = false,
+    TriggerDelay = 0,
+
+    AutoShootEnabled = false,
+    AutoShootDelay = 100,
+
+    ESPEnabled = true,
+    ESPBoxes = true,
+    ESPNames = true,
+    ESPHealth = true,
+    ESPDistance = true,
+    ESPTracers = true,
+    ESPMaxDistance = 1500,
+    ESPVisibleCheck = false,
+    TracerOrigin = "Bottom",
+
+    ThirdPersonEnabled = false,
+    ThirdPersonDistance = 15,
+
+    AntiAimEnabled = false,
+    AntiAimMode = "Spin",
+    AntiAimYaw = 0,
+    AntiAimPitch = 0,
+}
+
+-- ═══════════════════════════════════════
+-- COLORS
+-- ═══════════════════════════════════════
+local Colors = {
+    accent = Color3.fromRGB(166, 104, 255),
+    green = Color3.fromRGB(86, 214, 154),
+    red = Color3.fromRGB(255, 95, 116),
+    yellow = Color3.fromRGB(255, 214, 102),
+    white = Color3.fromRGB(255, 255, 255),
+}
+
+-- ═══════════════════════════════════════
+-- THIRD PERSON ORIGINALS
+-- ═══════════════════════════════════════
+local OriginalCamMode = LocalPlayer.CameraMode
+local OriginalMinZoom = LocalPlayer.CameraMinZoomDistance
+local OriginalMaxZoom = LocalPlayer.CameraMaxZoomDistance
+
+-- ═══════════════════════════════════════
+-- TRACKING VARS
+-- ═══════════════════════════════════════
+local LastKnownGun = nil
+local LastKnownOrigin = nil
+local ESPObjects = {}
+local isModifying = false
+
+-- ═══════════════════════════════════════
+-- FOV CIRCLE (CENTRO DE PANTALLA)
+-- ═══════════════════════════════════════
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1.5
+FOVCircle.NumSides = 80
+FOVCircle.Filled = false
+FOVCircle.Transparency = 0.8
+FOVCircle.Color = Colors.accent
+FOVCircle.Visible = false
+FOVCircle.Radius = Config.FOV
+
+-- ═══════════════════════════════════════
+-- UTILITY FUNCTIONS
+-- ═══════════════════════════════════════
+local function GetScreenCenter()
+    local vps = Camera.ViewportSize
+    return Vector2.new(vps.X / 2, vps.Y / 2)
+end
+
+local function IsAlive(player)
+    if not player or not player.Character then return false end
+    local hum = player.Character:FindFirstChildOfClass("Humanoid")
+    return hum and hum.Health > 0
+end
+
+local function IsTeammate(player)
+    if not Config.TeamCheck then return false end
+    if not LocalPlayer.Team or not player.Team then return false end
+    return LocalPlayer.Team == player.Team
+end
+
+local function IsVisible(part)
+    if not part then return false end
+    local origin = Camera.CFrame.Position
+    local direction = (part.Position - origin)
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+    local filterList = {Camera}
+    if LocalPlayer.Character then table.insert(filterList, LocalPlayer.Character) end
+    rayParams.FilterDescendantsInstances = filterList
+
+    local result = workspace:Raycast(origin, direction, rayParams)
+    if not result then return true end
+    if result.Instance:IsDescendantOf(part.Parent) then return true end
+    return false
+end
+
+-- ═══════════════════════════════════════
+-- TARGET SELECTION (SCREEN CENTER FOV)
+-- ═══════════════════════════════════════
+local function GetClosestTarget()
+    local closest = nil
+    local closestDist = math.huge
+    local screenCenter = GetScreenCenter()
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and IsAlive(player) and not IsTeammate(player) then
+            local char = player.Character
+            local aimPart = char:FindFirstChild(Config.AimPart) or char:FindFirstChild("Head")
+            if aimPart then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(aimPart.Position)
+                if onScreen then
+                    local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+                    if screenDist <= Config.FOV then
+                        local worldDist = (aimPart.Position - Camera.CFrame.Position).Magnitude
+                        if worldDist <= Config.MaxDistance then
+                            if not Config.VisualCheck or IsVisible(aimPart) then
+                                if screenDist < closestDist then
+                                    closestDist = screenDist
+                                    closest = player
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- ═══════════════════════════════════════
+-- SILENT AIM - FIRE CLEAN SHOT
+-- ═══════════════════════════════════════
+local function FireCleanShot(gun, origin, target, aimPart)
+    if not gun or not origin or not target or not target.Character or not aimPart then return end
+    local targetPos = aimPart.Position
+    local direction = (targetPos - origin).Unit
+    isModifying = true
+    pcall(function()
+        ShootRemote:FireServer(
+            gun,
+            direction,
+            origin,
+            target.Character,
+            aimPart,
+            targetPos,
+            targetPos + Vector3.new(math.random(-3, 3) / 100, math.random(-3, 3) / 100, math.random(-3, 3) / 100),
+            nil
+        )
+    end)
+    isModifying = false
+end
+
+-- ═══════════════════════════════════════
+-- HOOK __namecall (SILENT AIM + NO SPREAD)
+-- ═══════════════════════════════════════
+local OldNamecall
+OldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+    if isModifying then
+        return OldNamecall(self, ...)
+    end
+
+    local method = getnamecallmethod()
+
+    if method == "FireServer" and typeof(self) == "Instance" and self:IsA("RemoteEvent") and self.Name == "ShootRemote" then
+        local args = {...}
+
+        if typeof(args[1]) == "Instance" then LastKnownGun = args[1] end
+        if typeof(args[3]) == "Vector3" then LastKnownOrigin = args[3] end
+
+        -- NoSpread (solo cuando Silent OFF)
+        if Config.NoSpread and not Config.SilentAimEnabled then
+            if typeof(args[3]) == "Vector3" and typeof(args[6]) == "Vector3" then
+                local perfectDir = (args[6] - args[3]).Unit
+                isModifying = true
+                local r = self:FireServer(args[1], perfectDir, args[3], args[4], args[5], args[6], args[7], args[8])
+                isModifying = false
+                return r
+            end
+        end
+
+        -- Silent Aim ON → bloquear y re-disparar
+        if Config.Enabled and Config.SilentAimEnabled then
+            local target = GetClosestTarget()
+            if target and target.Character then
+                local aimPart = target.Character:FindFirstChild(Config.AimPart) or target.Character:FindFirstChild("Head")
+                if aimPart and typeof(args[3]) == "Vector3" then
+                    FireCleanShot(args[1], args[3], target, aimPart)
+
+                    if Config.SilentAimDebug then
+                        print("[ARTEMIS] Silent → " .. target.Name)
+                    end
+
+                    return nil
+                end
+            else
+                return nil
+            end
+        end
+    end
+
+    return OldNamecall(self, ...)
+end))
+
+-- ═══════════════════════════════════════
+-- ESP SYSTEM (3D BOXES)
+-- ═══════════════════════════════════════
+local function CreateESP(player)
+    if ESPObjects[player] then return end
+
+    local obj = {lines = {}, name = nil, health = nil, distance = nil, tracer = nil, healthbar = nil, healthbarBG = nil}
+
+    for i = 1, 12 do
+        local line = Drawing.new("Line")
+        line.Thickness = 1.2
+        line.Color = Colors.accent
+        line.Visible = false
+        obj.lines[i] = line
+    end
+
+    obj.name = Drawing.new("Text")
+    obj.name.Size = 14
+    obj.name.Center = true
+    obj.name.Outline = true
+    obj.name.Color = Colors.white
+    obj.name.Visible = false
+
+    obj.health = Drawing.new("Text")
+    obj.health.Size = 13
+    obj.health.Center = false
+    obj.health.Outline = true
+    obj.health.Color = Colors.green
+    obj.health.Visible = false
+
+    obj.distance = Drawing.new("Text")
+    obj.distance.Size = 13
+    obj.distance.Center = true
+    obj.distance.Outline = true
+    obj.distance.Color = Colors.yellow
+    obj.distance.Visible = false
+
+    obj.tracer = Drawing.new("Line")
+    obj.tracer.Thickness = 1.2
+    obj.tracer.Color = Colors.accent
+    obj.tracer.Visible = false
+
+    obj.healthbarBG = Drawing.new("Line")
+    obj.healthbarBG.Thickness = 3
+    obj.healthbarBG.Color = Color3.fromRGB(40, 40, 40)
+    obj.healthbarBG.Visible = false
+
+    obj.healthbar = Drawing.new("Line")
+    obj.healthbar.Thickness = 2
+    obj.healthbar.Color = Colors.green
+    obj.healthbar.Visible = false
+
+    ESPObjects[player] = obj
+end
+
+local function ClearESP(player)
+    local obj = ESPObjects[player]
+    if not obj then return end
+    for _, line in ipairs(obj.lines) do pcall(function() line:Remove() end) end
+    for _, key in ipairs({"name", "health", "distance", "tracer", "healthbar", "healthbarBG"}) do
+        if obj[key] then pcall(function() obj[key]:Remove() end) end
+    end
+    ESPObjects[player] = nil
+end
+
+local function UpdateESP(player)
+    local obj = ESPObjects[player]
+    if not obj then return end
+
+    if not Config.Enabled or not Config.ESPEnabled or player == LocalPlayer or not IsAlive(player) or IsTeammate(player) then
+        for _, line in ipairs(obj.lines) do line.Visible = false end
+        obj.name.Visible = false
+        obj.health.Visible = false
+        obj.distance.Visible = false
+        obj.tracer.Visible = false
+        obj.healthbar.Visible = false
+        obj.healthbarBG.Visible = false
+        return
+    end
+
+    local char = player.Character
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local head = char:FindFirstChild("Head")
+    if not hrp or not hum or not head then
+        for _, line in ipairs(obj.lines) do line.Visible = false end
+        obj.name.Visible = false
+        obj.health.Visible = false
+        obj.distance.Visible = false
+        obj.tracer.Visible = false
+        obj.healthbar.Visible = false
+        obj.healthbarBG.Visible = false
+        return
+    end
+
+    local dist = (hrp.Position - Camera.CFrame.Position).Magnitude
+    if dist > Config.ESPMaxDistance then
+        for _, line in ipairs(obj.lines) do line.Visible = false end
+        obj.name.Visible = false
+        obj.health.Visible = false
+        obj.distance.Visible = false
+        obj.tracer.Visible = false
+        obj.healthbar.Visible = false
+        obj.healthbarBG.Visible = false
+        return
+    end
+
+    if Config.ESPVisibleCheck and not IsVisible(head) then
+        for _, line in ipairs(obj.lines) do line.Visible = false end
+        obj.name.Visible = false
+        obj.health.Visible = false
+        obj.distance.Visible = false
+        obj.tracer.Visible = false
+        obj.healthbar.Visible = false
+        obj.healthbarBG.Visible = false
+        return
+    end
+
+    local isVisible = IsVisible(head)
+    local boxColor = isVisible and Colors.green or Colors.red
+
+    -- 3D box
+    local halfY = hum.RigType == Enum.HumanoidRigType.R15 and 2.75 or 2.5
+    local halfX = 1.2
+    local halfZ = 1.0
+    local cf = hrp.CFrame
+
+    local corners3D = {
+        cf * CFrame.new(-halfX, halfY, -halfZ),
+        cf * CFrame.new(halfX, halfY, -halfZ),
+        cf * CFrame.new(halfX, halfY, halfZ),
+        cf * CFrame.new(-halfX, halfY, halfZ),
+        cf * CFrame.new(-halfX, -halfY, -halfZ),
+        cf * CFrame.new(halfX, -halfY, -halfZ),
+        cf * CFrame.new(halfX, -halfY, halfZ),
+        cf * CFrame.new(-halfX, -halfY, halfZ),
+    }
+
+    local corners2D = {}
+    local allOnScreen = true
+    for i, c in ipairs(corners3D) do
+        local sp, onScr = Camera:WorldToViewportPoint(c.Position)
+        if not onScr then allOnScreen = false; break end
+        corners2D[i] = Vector2.new(sp.X, sp.Y)
+    end
+
+    if not allOnScreen then
+        for _, line in ipairs(obj.lines) do line.Visible = false end
+        obj.name.Visible = false
+        obj.health.Visible = false
+        obj.distance.Visible = false
+        obj.tracer.Visible = false
+        obj.healthbar.Visible = false
+        obj.healthbarBG.Visible = false
+        return
+    end
+
+    local edges = {
+        {1,2},{2,3},{3,4},{4,1},
+        {5,6},{6,7},{7,8},{8,5},
+        {1,5},{2,6},{3,7},{4,8},
+    }
+
+    if Config.ESPBoxes then
+        for i, edge in ipairs(edges) do
+            obj.lines[i].From = corners2D[edge[1]]
+            obj.lines[i].To = corners2D[edge[2]]
+            obj.lines[i].Color = boxColor
+            obj.lines[i].Visible = true
+        end
+    else
+        for _, line in ipairs(obj.lines) do line.Visible = false end
+    end
+
+    -- Bounding box 2D para posicionar textos
+    local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+    for _, c in ipairs(corners2D) do
+        if c.X < minX then minX = c.X end
+        if c.Y < minY then minY = c.Y end
+        if c.X > maxX then maxX = c.X end
+        if c.Y > maxY then maxY = c.Y end
+    end
+
+    -- Name
+    if Config.ESPNames then
+        obj.name.Text = player.DisplayName
+        obj.name.Position = Vector2.new((minX + maxX) / 2, minY - 18)
+        obj.name.Color = Colors.white
+        obj.name.Visible = true
+    else
+        obj.name.Visible = false
+    end
+
+    -- Distance
+    if Config.ESPDistance then
+        obj.distance.Text = math.floor(dist) .. "m"
+        obj.distance.Position = Vector2.new((minX + maxX) / 2, maxY + 3)
+        obj.distance.Color = Colors.yellow
+        obj.distance.Visible = true
+    else
+        obj.distance.Visible = false
+    end
+
+    -- Health bar (left side)
+    if Config.ESPHealth then
+        local healthPct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+        local barHeight = maxY - minY
+        local barX = minX - 6
+
+        obj.healthbarBG.From = Vector2.new(barX, minY)
+        obj.healthbarBG.To = Vector2.new(barX, maxY)
+        obj.healthbarBG.Visible = true
+
+        obj.healthbar.From = Vector2.new(barX, maxY)
+        obj.healthbar.To = Vector2.new(barX, maxY - barHeight * healthPct)
+        obj.healthbar.Color = Color3.fromRGB(255 * (1 - healthPct), 255 * healthPct, 50)
+        obj.healthbar.Visible = true
+
+        obj.health.Text = math.floor(hum.Health) .. "hp"
+        obj.health.Position = Vector2.new(maxX + 4, minY)
+        obj.health.Color = Color3.fromRGB(255 * (1 - healthPct), 255 * healthPct, 50)
+        obj.health.Visible = true
+    else
+        obj.health.Visible = false
+        obj.healthbar.Visible = false
+        obj.healthbarBG.Visible = false
+    end
+
+    -- Tracer
+    if Config.ESPTracers then
+        local vps = Camera.ViewportSize
+        local tracerStart
+        if Config.TracerOrigin == "Top" then
+            tracerStart = Vector2.new(vps.X / 2, 0)
+        elseif Config.TracerOrigin == "Center" then
+            tracerStart = Vector2.new(vps.X / 2, vps.Y / 2)
+        else
+            tracerStart = Vector2.new(vps.X / 2, vps.Y)
+        end
+        obj.tracer.From = tracerStart
+        obj.tracer.To = Vector2.new((minX + maxX) / 2, maxY)
+        obj.tracer.Color = boxColor
+        obj.tracer.Visible = true
+    else
+        obj.tracer.Visible = false
+    end
+end
+
+-- ═══════════════════════════════════════
+-- ESP CONNECTIONS
+-- ═══════════════════════════════════════
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then CreateESP(p) end
+end
+Players.PlayerAdded:Connect(function(p)
+    CreateESP(p)
+end)
+Players.PlayerRemoving:Connect(function(p)
+    ClearESP(p)
+end)
+
+-- ═══════════════════════════════════════
+-- ANTI-AIM SYSTEM (con Yaw/Pitch editor + Backwards at Targets)
+-- ═══════════════════════════════════════
+local antiAimAngle = 0
+local antiAimJitterSwitch = false
+local antiAimJitterTimer = 0
+
+local function GetAntiAimCFrame(dt)
+    if not Config.AntiAimEnabled then return nil end
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+
+    local mode = Config.AntiAimMode
+    local yawOffset = math.rad(Config.AntiAimYaw)
+    local pitchOffset = math.rad(Config.AntiAimPitch)
+
+    local baseYaw = 0
+
+    if mode == "Spin" then
+        antiAimAngle = antiAimAngle + dt * 20
+        baseYaw = antiAimAngle
+
+    elseif mode == "Backwards" then
+        local lv = hrp.CFrame.LookVector
+        baseYaw = math.atan2(-lv.X, -lv.Z) + math.pi
+
+    elseif mode == "Backwards at Targets" then
+        -- Mira HACIA el target más cercano, luego gira 180° (le da la espalda)
+        local closestPlayer = nil
+        local closestDist = math.huge
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and IsAlive(p) and not IsTeammate(p) then
+                local pChar = p.Character
+                local pHRP = pChar and pChar:FindFirstChild("HumanoidRootPart")
+                if pHRP then
+                    local d = (pHRP.Position - hrp.Position).Magnitude
+                    if d < closestDist then
+                        closestDist = d
+                        closestPlayer = p
+                    end
+                end
+            end
+        end
+        if closestPlayer and closestPlayer.Character then
+            local targetHRP = closestPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if targetHRP then
+                local dir = (targetHRP.Position - hrp.Position)
+                local angleToTarget = math.atan2(dir.X, dir.Z)
+                baseYaw = angleToTarget + math.pi -- 180° backwards
+            else
+                baseYaw = math.atan2(-hrp.CFrame.LookVector.X, -hrp.CFrame.LookVector.Z)
+            end
+        else
+            baseYaw = math.atan2(-hrp.CFrame.LookVector.X, -hrp.CFrame.LookVector.Z)
+        end
+
+    elseif mode == "Random" then
+        baseYaw = math.random() * math.pi * 2
+
+    elseif mode == "Jitter" then
+        antiAimJitterTimer = antiAimJitterTimer + dt
+        if antiAimJitterTimer >= 0.1 then
+            antiAimJitterSwitch = not antiAimJitterSwitch
+            antiAimJitterTimer = 0
+        end
+        local lv = hrp.CFrame.LookVector
+        local base = math.atan2(-lv.X, -lv.Z)
+        baseYaw = base + (antiAimJitterSwitch and 1.5 or -1.5)
+
+    elseif mode == "Custom" then
+        -- Solo usa los offsets de Yaw/Pitch, sin rotación base adicional
+        baseYaw = 0
+    end
+
+    local finalYaw = baseYaw + yawOffset
+
+    -- Construir CFrame con pitch y yaw
+    local pos = hrp.Position
+    local yawCF = CFrame.new(pos) * CFrame.Angles(0, finalYaw, 0)
+    local finalCF = yawCF * CFrame.Angles(pitchOffset, 0, 0)
+
+    return finalCF
+end
+
+-- ═══════════════════════════════════════
+-- THIRD PERSON
+-- ═══════════════════════════════════════
+local function ForceTP()
+    if not Config.ThirdPersonEnabled then return end
+    pcall(function()
+        if LocalPlayer.CameraMode ~= Enum.CameraMode.Classic then
+            LocalPlayer.CameraMode = Enum.CameraMode.Classic
+        end
+        if LocalPlayer.CameraMinZoomDistance ~= Config.ThirdPersonDistance then
+            LocalPlayer.CameraMinZoomDistance = Config.ThirdPersonDistance
+        end
+        if LocalPlayer.CameraMaxZoomDistance ~= Config.ThirdPersonDistance then
+            LocalPlayer.CameraMaxZoomDistance = Config.ThirdPersonDistance
+        end
+    end)
+end
+
+RunService.RenderStepped:Connect(ForceTP)
+RunService.Heartbeat:Connect(ForceTP)
+RunService.Stepped:Connect(ForceTP)
+task.spawn(function()
+    while true do
+        task.wait()
+        ForceTP()
+    end
+end)
+LocalPlayer:GetPropertyChangedSignal("CameraMode"):Connect(ForceTP)
+LocalPlayer:GetPropertyChangedSignal("CameraMinZoomDistance"):Connect(ForceTP)
+LocalPlayer:GetPropertyChangedSignal("CameraMaxZoomDistance"):Connect(ForceTP)
+
+-- ═══════════════════════════════════════
+-- MAIN LOOP (ESP + FOV + AIMBOT + ANTI-AIM)
+-- ═══════════════════════════════════════
+local rightMouseDown = false
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        rightMouseDown = true
+    end
+end)
+UserInputService.InputEnded:Connect(function(input, gpe)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        rightMouseDown = false
+    end
+end)
+
+RunService.RenderStepped:Connect(function(dt)
+    -- FOV Circle → CENTRO DE LA PANTALLA
+    local screenCenter = GetScreenCenter()
+    FOVCircle.Position = screenCenter
+    FOVCircle.Radius = Config.FOV
+    FOVCircle.Visible = Config.Enabled and Config.ShowFOV
+
+    -- ESP Update
+    for player, _ in pairs(ESPObjects) do
+        UpdateESP(player)
+    end
+
+    -- Aimbot (right-click hold)
+    if Config.Enabled and Config.AimbotEnabled and rightMouseDown then
+        local target = GetClosestTarget()
+        if target and target.Character then
+            local aimPart = target.Character:FindFirstChild(Config.AimPart) or target.Character:FindFirstChild("Head")
+            if aimPart then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(aimPart.Position)
+                if onScreen then
+                    local center = GetScreenCenter()
+                    local dx = (screenPos.X - center.X) / Config.AimSmooth
+                    local dy = (screenPos.Y - center.Y) / Config.AimSmooth
+                    mousemoverel(dx, dy)
+                end
+            end
+        end
+    end
+
+    -- Anti-Aim
+    if Config.Enabled and Config.AntiAimEnabled then
+        local newCF = GetAntiAimCFrame(dt)
+        if newCF then
+            local char = LocalPlayer.Character
+            if char then
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    hrp.CFrame = CFrame.new(hrp.Position) * (newCF - newCF.Position)
+                end
+            end
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════
+-- TRIGGERBOT
+-- ═══════════════════════════════════════
+task.spawn(function()
+    while true do
+        task.wait(0.01)
+        if Config.Enabled and Config.TriggerbotEnabled then
+            local origin = Camera.CFrame.Position
+            local direction = Camera.CFrame.LookVector * Config.MaxDistance
+            local rayParams = RaycastParams.new()
+            rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+            local filterList = {Camera}
+            if LocalPlayer.Character then table.insert(filterList, LocalPlayer.Character) end
+            rayParams.FilterDescendantsInstances = filterList
+
+            local result = workspace:Raycast(origin, direction, rayParams)
+            if result and result.Instance then
+                local hitChar = result.Instance:FindFirstAncestorOfClass("Model")
+                if hitChar then
+                    local hitPlayer = Players:GetPlayerFromCharacter(hitChar)
+                    if hitPlayer and hitPlayer ~= LocalPlayer and IsAlive(hitPlayer) and not IsTeammate(hitPlayer) then
+                        if Config.TriggerDelay > 0 then
+                            task.wait(Config.TriggerDelay / 1000)
+                        end
+                        pcall(function() mouse1click() end)
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════
+-- AUTO SHOOT (Silent Remote cuando Silent ON)
+-- ═══════════════════════════════════════
+task.spawn(function()
+    while true do
+        task.wait(Config.AutoShootDelay / 1000)
+        if Config.Enabled and Config.AutoShootEnabled then
+            local target = GetClosestTarget()
+            if target and target.Character then
+                if Config.SilentAimEnabled and ShootRemote and LastKnownGun and LastKnownOrigin then
+                    local aimPart = target.Character:FindFirstChild(Config.AimPart) or target.Character:FindFirstChild("Head")
+                    if aimPart then
+                        local originNow = Camera.CFrame.Position
+                        FireCleanShot(LastKnownGun, originNow, target, aimPart)
+                    end
+                else
+                    pcall(function() mouse1click() end)
+                end
+            end
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════
+-- LINORIA UI
+-- ═══════════════════════════════════════
+local LinoriaURL = "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/"
+local Library = loadstring(game:HttpGet(LinoriaURL .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(LinoriaURL .. "addons/ThemeManager.lua"))()
+local SaveManager = loadstring(game:HttpGet(LinoriaURL .. "addons/SaveManager.lua"))()
+
+local Window = Library:CreateWindow({
+    Title = "ARTEMIS V14",
+    Center = true,
+    AutoShow = true,
+    TabPadding = 2,
+    MenuFadeTime = 0.15,
+})
+
+-- ═══════════════════════════════════════
+-- TAB: AIM
+-- ═══════════════════════════════════════
+local AimTab = Window:AddTab("Aim")
+local AimGeneral = AimTab:AddLeftGroupbox("General")
+local AimAimbot = AimTab:AddRightGroupbox("Aimbot")
+
+AimGeneral:AddToggle("Enabled", {Text = "Activar ARTEMIS", Default = true, Tooltip = "Master switch"})
+:AddKeyPicker("EnabledKey", {Default = "RightShift", NoUI = false, Text = "Toggle"})
+
+AimGeneral:AddToggle("ShowFOV", {Text = "Mostrar FOV Circle", Default = true})
+AimGeneral:AddSlider("FOV", {Text = "FOV Radius", Default = 250, Min = 50, Max = 800, Suffix = "px", Rounding = 0})
+AimGeneral:AddSlider("MaxDistance", {Text = "Max Distance", Default = 1000, Min = 100, Max = 5000, Suffix = "m", Rounding = 0})
+AimGeneral:AddToggle("TeamCheck", {Text = "Team Check", Default = true})
+AimGeneral:AddToggle("VisualCheck", {Text = "Visibility Check", Default = true})
+AimGeneral:AddDropdown("AimPart", {Values = {"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso"}, Default = "Head", Text = "Aim Part"})
+
+AimAimbot:AddToggle("AimbotEnabled", {Text = "Aimbot (Right Click)", Default = false})
+AimAimbot:AddSlider("AimSmooth", {Text = "Smoothing", Default = 25, Min = 1, Max = 100, Suffix = "", Rounding = 0})
+
+-- ═══════════════════════════════════════
+-- TAB: COMBAT
+-- ═══════════════════════════════════════
+local CombatTab = Window:AddTab("Combat")
+local CombatSilent = CombatTab:AddLeftGroupbox("Silent Aim")
+local CombatExtra = CombatTab:AddRightGroupbox("Combat Features")
+local CombatAntiAim = CombatTab:AddLeftGroupbox("Anti-Aim")
+local CombatAntiAimAdv = CombatTab:AddRightGroupbox("Anti-Aim Advanced")
+
+CombatSilent:AddToggle("SilentAimEnabled", {Text = "Silent Aim", Default = false, Tooltip = "Redirige balas al target"})
+CombatSilent:AddToggle("SilentAimDebug", {Text = "Silent Aim Debug", Default = false, Tooltip = "Print target en consola"})
+CombatSilent:AddToggle("NoSpread", {Text = "No Spread", Default = false, Tooltip = "Elimina spread (solo sin Silent)"})
+
+CombatExtra:AddToggle("TriggerbotEnabled", {Text = "Triggerbot", Default = false})
+CombatExtra:AddSlider("TriggerDelay", {Text = "Trigger Delay", Default = 0, Min = 0, Max = 500, Suffix = "ms", Rounding = 0})
+CombatExtra:AddDivider()
+CombatExtra:AddToggle("AutoShootEnabled", {Text = "Auto Shoot", Default = false})
+CombatExtra:AddSlider("AutoShootDelay", {Text = "Auto Shoot Delay", Default = 100, Min = 10, Max = 1000, Suffix = "ms", Rounding = 0})
+
+CombatAntiAim:AddToggle("AntiAimEnabled", {Text = "Anti-Aim", Default = false})
+CombatAntiAim:AddDropdown("AntiAimMode", {
+    Values = {"Spin", "Backwards", "Backwards at Targets", "Random", "Jitter", "Custom"},
+    Default = "Spin",
+    Text = "AA Mode"
+})
+
+CombatAntiAimAdv:AddSlider("AntiAimYaw", {Text = "Yaw Offset", Default = 0, Min = -180, Max = 180, Suffix = "°", Rounding = 0})
+CombatAntiAimAdv:AddSlider("AntiAimPitch", {Text = "Pitch Offset", Default = 0, Min = -90, Max = 90, Suffix = "°", Rounding = 0})
+CombatAntiAimAdv:AddLabel("Yaw/Pitch se suman al modo seleccionado")
+CombatAntiAimAdv:AddLabel("Usa modo 'Custom' para control manual total")
+
+-- ═══════════════════════════════════════
+-- TAB: VISUALS
+-- ═══════════════════════════════════════
+local VisualsTab = Window:AddTab("Visuals")
+local VisualESP = VisualsTab:AddLeftGroupbox("ESP")
+local VisualESPOptions = VisualsTab:AddRightGroupbox("ESP Options")
+
+VisualESP:AddToggle("ESPEnabled", {Text = "ESP", Default = true})
+VisualESP:AddToggle("ESPBoxes", {Text = "3D Boxes", Default = true})
+VisualESP:AddToggle("ESPNames", {Text = "Names", Default = true})
+VisualESP:AddToggle("ESPHealth", {Text = "Health", Default = true})
+VisualESP:AddToggle("ESPDistance", {Text = "Distance", Default = true})
+VisualESP:AddToggle("ESPTracers", {Text = "Tracers", Default = true})
+
+VisualESPOptions:AddToggle("ESPVisibleCheck", {Text = "ESP Visible Check", Default = false, Tooltip = "Solo muestra ESP si es visible"})
+VisualESPOptions:AddSlider("ESPMaxDistance", {Text = "ESP Max Distance", Default = 1500, Min = 100, Max = 5000, Suffix = "m", Rounding = 0})
+VisualESPOptions:AddDropdown("TracerOrigin", {Values = {"Bottom", "Center", "Top"}, Default = "Bottom", Text = "Tracer Origin"})
+
+-- ═══════════════════════════════════════
+-- TAB: WORLD
+-- ═══════════════════════════════════════
+local WorldTab = Window:AddTab("World")
+local WorldTP = WorldTab:AddLeftGroupbox("Camera")
+
+WorldTP:AddToggle("ThirdPersonEnabled", {Text = "Third Person", Default = false})
+WorldTP:AddSlider("ThirdPersonDistance", {Text = "TP Distance", Default = 15, Min = 5, Max = 50, Suffix = "m", Rounding = 0})
+
+-- ═══════════════════════════════════════
+-- TAB: UI SETTINGS
+-- ═══════════════════════════════════════
+local UITab = Window:AddTab("UI Settings")
+local MenuGroup = UITab:AddLeftGroupbox("Menu")
+
+MenuGroup:AddButton("Unload ARTEMIS", function()
+    if genv.ARTEMIS_CLEANUP then pcall(genv.ARTEMIS_CLEANUP) end
+    Library:Unload()
+end)
+MenuGroup:AddLabel("Menu bind: RightShift")
+
+local ThemeGroup = UITab:AddRightGroupbox("Theme")
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+ThemeManager:SetFolder("ARTEMIS")
+SaveManager:SetFolder("ARTEMIS")
+ThemeManager:ApplyToGroupbox(ThemeGroup)
+SaveManager:BuildConfigSection(UITab)
+
+Library.ToggleKeybind = Options.EnabledKey
+
+-- ═══════════════════════════════════════
+-- BIND UI → CONFIG
+-- ═══════════════════════════════════════
+Toggles.Enabled:OnChanged(function() Config.Enabled = Toggles.Enabled.Value end)
+Toggles.ShowFOV:OnChanged(function() Config.ShowFOV = Toggles.ShowFOV.Value end)
+Options.FOV:OnChanged(function() Config.FOV = Options.FOV.Value end)
+Options.MaxDistance:OnChanged(function() Config.MaxDistance = Options.MaxDistance.Value end)
+Toggles.TeamCheck:OnChanged(function() Config.TeamCheck = Toggles.TeamCheck.Value end)
+Toggles.VisualCheck:OnChanged(function() Config.VisualCheck = Toggles.VisualCheck.Value end)
+Options.AimPart:OnChanged(function() Config.AimPart = Options.AimPart.Value end)
+
+Toggles.AimbotEnabled:OnChanged(function() Config.AimbotEnabled = Toggles.AimbotEnabled.Value end)
+Options.AimSmooth:OnChanged(function() Config.AimSmooth = Options.AimSmooth.Value end)
+
+Toggles.SilentAimEnabled:OnChanged(function() Config.SilentAimEnabled = Toggles.SilentAimEnabled.Value end)
+Toggles.SilentAimDebug:OnChanged(function() Config.SilentAimDebug = Toggles.SilentAimDebug.Value end)
+Toggles.NoSpread:OnChanged(function() Config.NoSpread = Toggles.NoSpread.Value end)
+
+Toggles.TriggerbotEnabled:OnChanged(function() Config.TriggerbotEnabled = Toggles.TriggerbotEnabled.Value end)
+Options.TriggerDelay:OnChanged(function() Config.TriggerDelay = Options.TriggerDelay.Value end)
+Toggles.AutoShootEnabled:OnChanged(function() Config.AutoShootEnabled = Toggles.AutoShootEnabled.Value end)
+Options.AutoShootDelay:OnChanged(function() Config.AutoShootDelay = Options.AutoShootDelay.Value end)
+
+Toggles.ESPEnabled:OnChanged(function() Config.ESPEnabled = Toggles.ESPEnabled.Value end)
+Toggles.ESPBoxes:OnChanged(function() Config.ESPBoxes = Toggles.ESPBoxes.Value end)
+Toggles.ESPNames:OnChanged(function() Config.ESPNames = Toggles.ESPNames.Value end)
+Toggles.ESPHealth:OnChanged(function() Config.ESPHealth = Toggles.ESPHealth.Value end)
+Toggles.ESPDistance:OnChanged(function() Config.ESPDistance = Toggles.ESPDistance.Value end)
+Toggles.ESPTracers:OnChanged(function() Config.ESPTracers = Toggles.ESPTracers.Value end)
+Toggles.ESPVisibleCheck:OnChanged(function() Config.ESPVisibleCheck = Toggles.ESPVisibleCheck.Value end)
+Options.ESPMaxDistance:OnChanged(function() Config.ESPMaxDistance = Options.ESPMaxDistance.Value end)
+Options.TracerOrigin:OnChanged(function() Config.TracerOrigin = Options.TracerOrigin.Value end)
+
+Toggles.ThirdPersonEnabled:OnChanged(function()
+    Config.ThirdPersonEnabled = Toggles.ThirdPersonEnabled.Value
+    if not Toggles.ThirdPersonEnabled.Value then
+        pcall(function()
+            LocalPlayer.CameraMode = OriginalCamMode
+            LocalPlayer.CameraMinZoomDistance = OriginalMinZoom
+            LocalPlayer.CameraMaxZoomDistance = OriginalMaxZoom
+        end)
+    end
+end)
+Options.ThirdPersonDistance:OnChanged(function() Config.ThirdPersonDistance = Options.ThirdPersonDistance.Value end)
+
+Toggles.AntiAimEnabled:OnChanged(function() Config.AntiAimEnabled = Toggles.AntiAimEnabled.Value end)
+Options.AntiAimMode:OnChanged(function() Config.AntiAimMode = Options.AntiAimMode.Value end)
+Options.AntiAimYaw:OnChanged(function() Config.AntiAimYaw = Options.AntiAimYaw.Value end)
+Options.AntiAimPitch:OnChanged(function() Config.AntiAimPitch = Options.AntiAimPitch.Value end)
+
+-- ═══════════════════════════════════════
+-- CLEANUP FUNCTION
+-- ═══════════════════════════════════════
+genv.ARTEMIS_CLEANUP = function()
+    pcall(function() LocalPlayer.CameraMode = OriginalCamMode end)
+    pcall(function() LocalPlayer.CameraMinZoomDistance = OriginalMinZoom end)
+    pcall(function() LocalPlayer.CameraMaxZoomDistance = OriginalMaxZoom end)
+    for p, _ in pairs(ESPObjects) do
+        ClearESP(p)
+    end
+    pcall(function() FOVCircle:Remove() end)
+end
+
+Library:OnUnload(function()
+    if genv.ARTEMIS_CLEANUP then pcall(genv.ARTEMIS_CLEANUP) end
+end)
+
+-- ═══════════════════════════════════════
+-- NOTIFY
+-- ═══════════════════════════════════════
+Library:Notify("ARTEMIS V14 loaded | FOV centrado | Anti-Aim mejorado", 5)

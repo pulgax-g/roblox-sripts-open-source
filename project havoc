@@ -1,0 +1,1839 @@
+--[[
+    ╔═══════════════════════════════════════════╗
+    ║      ARTEMIS V2 - GUNACTION + HITBOXES    ║
+    ║  ESP/Silent Aim con HeadHitbox/BodyHitbox  ║
+    ║  Soporte Escopeta (multi-pellet)           ║
+    ╚═══════════════════════════════════════════╝
+]]
+
+-- ═══════════════════════════════════════
+-- CLEANUP
+-- ═══════════════════════════════════════
+local genv = (getgenv and getgenv()) or _G
+if genv.ARTEMIS_CLEANUP then
+    pcall(genv.ARTEMIS_CLEANUP)
+    task.wait(0.1)
+end
+
+-- ═══════════════════════════════════════
+-- SERVICES
+-- ═══════════════════════════════════════
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- ═══════════════════════════════════════
+-- REMOTE
+-- ═══════════════════════════════════════
+local ShootRemote = nil
+pcall(function()
+    ShootRemote = game:GetService("ReplicatedStorage")
+        :WaitForChild("Networking", 15)
+        :WaitForChild("Remotes", 10)
+        :WaitForChild("GunAction", 10)
+end)
+if not ShootRemote then
+    task.spawn(function()
+        for i = 1, 10 do
+            task.wait(3)
+            local ok, rem = pcall(function()
+                return game:GetService("ReplicatedStorage")
+                    :WaitForChild("Networking", 5)
+                    :WaitForChild("Remotes", 5)
+                    :WaitForChild("GunAction", 5)
+            end)
+            if ok and rem then ShootRemote = rem; print("[ARTEMIS] Remote encontrado!"); break end
+        end
+    end)
+end
+
+-- ═══════════════════════════════════════
+-- CONFIG
+-- ═══════════════════════════════════════
+local Config = {
+    Enabled = true,
+    ShowFOV = true,
+    FOV = 250,
+    MaxDistance = 1000,
+    TeamCheck = true,
+    AimPart = "Head",
+    VisualCheck = true,
+
+    AimbotEnabled = false,
+    AimSmooth = 25,
+
+    SilentAimEnabled = false,
+    SilentAimDebug = false,
+    NoSpread = false,
+
+    TriggerbotEnabled = false,
+    TriggerDelay = 0,
+
+    AutoShootEnabled = false,
+    AutoShootDelay = 100,
+
+    KillAuraEnabled = false,
+    KillAuraRange = 50,
+    KillAuraDelay = 50,
+    KillAuraMulti = false,
+
+    FlyEnabled = false,
+    FlySpeed = 50,
+
+    ESPEnabled = true,
+    ESPBoxes = true,
+    ESPNames = true,
+    ESPHealth = true,
+    ESPDistance = true,
+    ESPTracers = true,
+    ESPMaxDistance = 1500,
+    ESPVisibleCheck = false,
+    TracerOrigin = "Bottom",
+
+    ThirdPersonEnabled = false,
+    ThirdPersonDistance = 15,
+
+    AntiAimEnabled = false,
+    AntiAimMode = "Spin",
+    AntiAimYaw = 0,
+    AntiAimPitch = 0,
+}
+
+-- ═══════════════════════════════════════
+-- COLORS
+-- ═══════════════════════════════════════
+local Colors = {
+    accent = Color3.fromRGB(166, 104, 255),
+    green = Color3.fromRGB(86, 214, 154),
+    red = Color3.fromRGB(255, 95, 116),
+    yellow = Color3.fromRGB(255, 214, 102),
+    white = Color3.fromRGB(255, 255, 255),
+}
+
+local OriginalCamMode = LocalPlayer.CameraMode
+local OriginalMinZoom = LocalPlayer.CameraMinZoomDistance
+local OriginalMaxZoom = LocalPlayer.CameraMaxZoomDistance
+
+local ESPObjects = {}
+local isModifying = false
+
+local StoredData = {
+    weaponId = 1,
+    flag = false,
+    stat = 2.15,
+    origin = Vector3.new(0, 0, 0),
+}
+
+local FlyBV = nil
+local FlyBG = nil
+local FlyKeys = { W=false, A=false, S=false, D=false, Space=false, LShift=false }
+
+-- ═══════════════════════════════════════
+-- FOV CIRCLE
+-- ═══════════════════════════════════════
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1.5
+FOVCircle.NumSides = 80
+FOVCircle.Filled = false
+FOVCircle.Transparency = 0.8
+FOVCircle.Color = Colors.accent
+FOVCircle.Visible = false
+FOVCircle.Radius = Config.FOV
+
+-- ═══════════════════════════════════════
+-- HITBOX FINDER
+-- El juego usa hitboxes custom en workspace:
+--   workspace.[PlayerName].HeadHitbox
+--   workspace.[PlayerName].BodyHitbox
+-- ═══════════════════════════════════════
+local function GetPlayerHitboxes(player)
+    -- Buscar container con el nombre del jugador en workspace
+    local container = workspace:FindFirstChild(player.Name)
+
+    -- Si no existe con el nombre exacto, buscar por DisplayName
+    if not container then
+        container = workspace:FindFirstChild(player.DisplayName)
+    end
+
+    -- Si aún no, buscar en todos los hijos de workspace
+    if not container then
+        for _, child in ipairs(workspace:GetChildren()) do
+            if child.Name == player.Name or child.Name == player.DisplayName then
+                container = child
+                break
+            end
+        end
+    end
+
+    if not container then return nil, nil end
+
+    local headHB = container:FindFirstChild("HeadHitbox")
+    local bodyHB = container:FindFirstChild("BodyHitbox")
+
+    return headHB, bodyHB
+end
+
+-- Obtener la mejor parte para apuntar según Config.AimPart
+local function GetAimTarget(player)
+    local headHB, bodyHB = GetPlayerHitboxes(player)
+
+    if Config.AimPart == "Head" then
+        if headHB then return headHB end
+        -- Fallback al Head del character
+        if player.Character then
+            local h = player.Character:FindFirstChild("Head")
+            if h then return h end
+        end
+    else
+        -- Body / HRP / Torso
+        if bodyHB then return bodyHB end
+        if player.Character then
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then return hrp end
+            local torso = player.Character:FindFirstChild("UpperTorso") or player.Character:FindFirstChild("Torso")
+            if torso then return torso end
+        end
+    end
+
+    return headHB or bodyHB
+end
+
+-- Obtener la parte central para ESP (BodyHitbox o HRP)
+local function GetESPCenter(player)
+    local _, bodyHB = GetPlayerHitboxes(player)
+    if bodyHB and bodyHB:IsA("BasePart") then return bodyHB end
+
+    if player.Character then
+        local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then return hrp end
+        local _, bHB = GetPlayerHitboxes(player)
+        if bHB then return bHB end
+    end
+
+    return nil
+end
+
+-- ═══════════════════════════════════════
+-- UTILITIES
+-- ═══════════════════════════════════════
+local function GetScreenCenter()
+    local vps = Camera.ViewportSize
+    return Vector2.new(vps.X / 2, vps.Y / 2)
+end
+
+local function IsAlive(player)
+    if not player or not player.Character then return false end
+    local hum = player.Character:FindFirstChildOfClass("Humanoid")
+    return hum and hum.Health > 0
+end
+
+local function IsTeammate(player)
+    if not Config.TeamCheck then return false end
+    if not LocalPlayer.Team or not player.Team then return false end
+    return LocalPlayer.Team == player.Team
+end
+
+local function IsVisible(part)
+    if not part then return false end
+    local origin = Camera.CFrame.Position
+    local rp = RaycastParams.new()
+    rp.FilterType = Enum.RaycastFilterType.Blacklist
+    local fl = {Camera}
+    if LocalPlayer.Character then table.insert(fl, LocalPlayer.Character) end
+    -- También excluir hitboxes del workspace para no bloquear raycast
+    for _, p in ipairs(Players:GetPlayers()) do
+        local c = workspace:FindFirstChild(p.Name)
+        if c then table.insert(fl, c) end
+    end
+    rp.FilterDescendantsInstances = fl
+    local result = workspace:Raycast(origin, part.Position - origin, rp)
+    if not result then return true end
+    if result.Instance:IsDescendantOf(part.Parent) then return true end
+    return false
+end
+
+-- ═══════════════════════════════════════
+-- TARGET SELECTION (usa hitboxes)
+-- ═══════════════════════════════════════
+local function GetClosestTarget()
+    local closest, closestDist = nil, math.huge
+    local sc = GetScreenCenter()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and IsAlive(p) and not IsTeammate(p) then
+            local aimPart = GetAimTarget(p)
+            if aimPart then
+                local sp, on = Camera:WorldToViewportPoint(aimPart.Position)
+                if on then
+                    local sd = (Vector2.new(sp.X, sp.Y) - sc).Magnitude
+                    if sd <= Config.FOV then
+                        local wd = (aimPart.Position - Camera.CFrame.Position).Magnitude
+                        if wd <= Config.MaxDistance and (not Config.VisualCheck or IsVisible(aimPart)) then
+                            if sd < closestDist then closestDist = sd; closest = p end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function GetTargetsInRange(range)
+    local targets = {}
+    local char = LocalPlayer.Character
+    if not char then return targets end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local center = hrp and hrp.Position or Camera.CFrame.Position
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and IsAlive(p) and not IsTeammate(p) then
+            local aimPart = GetAimTarget(p)
+            if aimPart and (aimPart.Position - center).Magnitude <= range then
+                table.insert(targets, p)
+            end
+        end
+    end
+    return targets
+end
+
+-- ═══════════════════════════════════════
+-- SHOTGUN PELLET GENERATOR
+-- Genera posiciones de pellets alrededor
+-- del target con spread cónico natural
+-- ═══════════════════════════════════════
+local function GeneratePelletPositions(targetPos, origin, pelletCount)
+    local positions = {}
+    local dist = (targetPos - origin).Magnitude
+    -- Spread radius scales with distance (shotgun cone)
+    local spreadRadius = math.max(0.3, dist * 0.015)
+
+    for i = 1, pelletCount do
+        positions[i] = targetPos + Vector3.new(
+            math.random(-spreadRadius * 100, spreadRadius * 100) / 100,
+            math.random(-spreadRadius * 100, spreadRadius * 100) / 100,
+            math.random(-spreadRadius * 100, spreadRadius * 100) / 100
+        )
+    end
+    return positions
+end
+
+-- ═══════════════════════════════════════
+-- SILENT AIM LOGIC
+--
+-- Redirects:
+--   args[4] = direction → toward target HeadHitbox
+--   args[7] = hit positions → around target (shotgun support)
+--   args[8] = final hit → target HeadHitbox position
+-- ═══════════════════════════════════════
+local function RedirectShootArgs(args, target)
+    local aimPart = GetAimTarget(target)
+    if not aimPart then return false end
+
+    local origin = typeof(args[3]) == "Vector3" and args[3] or Camera.CFrame.Position
+    local targetPos = aimPart.Position
+    local newDir = (targetPos - origin).Unit
+
+    -- args[4] = direction
+    args[4] = newDir
+
+    -- args[7] = hit positions (single or shotgun)
+    if typeof(args[7]) == "table" then
+        local pelletCount = #args[7]
+        if pelletCount > 1 then
+            -- SHOTGUN: generate spread around target
+            args[7] = GeneratePelletPositions(targetPos, origin, pelletCount)
+        elseif pelletCount == 1 then
+            -- Single shot
+            args[7] = { targetPos }
+        end
+    end
+
+    -- args[8] = final hit position
+    args[8] = targetPos
+
+    return true
+end
+
+-- ═══════════════════════════════════════
+-- FABRICATE SHOOT (Kill Aura / AutoShoot)
+-- ═══════════════════════════════════════
+local function FabricateShoot(remote, target, originOverride)
+    if not remote or not target then return end
+    local aimPart = GetAimTarget(target)
+    if not aimPart then return end
+
+    local origin = originOverride or Camera.CFrame.Position
+    local targetPos = aimPart.Position
+    local dir = (targetPos - origin).Unit
+
+    -- Detectar si es escopeta (último disparo tuvo >1 pellet)
+    local pelletCount = StoredData.lastPelletCount or 1
+    local pellets = {}
+    if pelletCount > 1 then
+        pellets = GeneratePelletPositions(targetPos, origin, pelletCount)
+    else
+        pellets = { targetPos }
+    end
+
+    local shootArgs = {
+        "Shoot",
+        StoredData.weaponId,
+        origin,
+        dir,
+        StoredData.flag,
+        StoredData.stat,
+        pellets,
+        targetPos,
+    }
+
+    isModifying = true
+    pcall(function()
+        remote:FireServer(unpack(shootArgs))
+    end)
+    isModifying = false
+end
+
+-- ═══════════════════════════════════════
+-- HOOK __namecall
+-- ═══════════════════════════════════════
+local OldNamecall
+OldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+    if isModifying then
+        return OldNamecall(self, ...)
+    end
+
+    local method = getnamecallmethod()
+
+    if method == "FireServer" and typeof(self) == "Instance"
+       and self:IsA("RemoteEvent") and self.Name == "GunAction" then
+
+        local args = {...}
+        local actionType = args[1]
+
+        -- Almacenar datos
+        if typeof(args[2]) == "number" then StoredData.weaponId = args[2] end
+        if typeof(args[3]) == "Vector3" then StoredData.origin = args[3] end
+        if typeof(args[5]) == "boolean" then StoredData.flag = args[5] end
+        if typeof(args[6]) == "number" then StoredData.stat = args[6] end
+        if typeof(args[7]) == "table" then StoredData.lastPelletCount = #args[7] end
+
+        -- ═══ "Shoot" ACTION ═══
+        if actionType == "Shoot" then
+
+            -- SILENT AIM
+            if Config.Enabled and Config.SilentAimEnabled then
+                local target = GetClosestTarget()
+
+                if target then
+                    local newArgs = {
+                        args[1], args[2], args[3], args[4],
+                        args[5], args[6], args[7], args[8]
+                    }
+                    if typeof(newArgs[7]) == "table" then
+                        local cloned = {}
+                        for i, v in ipairs(newArgs[7]) do cloned[i] = v end
+                        newArgs[7] = cloned
+                    end
+
+                    local redirected = RedirectShootArgs(newArgs, target)
+
+                    if redirected then
+                        isModifying = true
+                        local r = self:FireServer(unpack(newArgs))
+                        isModifying = false
+
+                        if Config.SilentAimDebug then
+                            local aimPart = GetAimTarget(target)
+                            local pellets = typeof(newArgs[7]) == "table" and #newArgs[7] or 1
+                            print("[ARTEMIS] Silent → " .. target.Name .. " | " .. (aimPart and aimPart.Name or "?") .. " | " .. pellets .. " pellets")
+                        end
+
+                        return r
+                    end
+                end
+                -- No target → dejar pasar
+
+            -- NO SPREAD
+            elseif Config.NoSpread then
+                if typeof(args[3]) == "Vector3" and typeof(args[7]) == "table" and #args[7] > 0 then
+                    local origin = args[3]
+                    local hitPos = args[7][1]
+                    if typeof(hitPos) == "Vector3" then
+                        local cleanDir = (hitPos - origin).Unit
+                        local newArgs = {
+                            args[1], args[2], args[3], cleanDir,
+                            args[5], args[6], args[7], args[8]
+                        }
+                        isModifying = true
+                        local r = self:FireServer(unpack(newArgs))
+                        isModifying = false
+                        return r
+                    end
+                end
+            end
+        end
+    end
+
+    return OldNamecall(self, ...)
+end))
+
+-- ═══════════════════════════════════════
+-- KILL AURA
+-- ═══════════════════════════════════════
+task.spawn(function()
+    while true do
+        task.wait(Config.KillAuraDelay / 1000)
+        if Config.Enabled and Config.KillAuraEnabled and ShootRemote then
+            local targets = GetTargetsInRange(Config.KillAuraRange)
+            if Config.KillAuraMulti then
+                for _, t in ipairs(targets) do FabricateShoot(ShootRemote, t) end
+            else
+                local center = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                local cPos = center and center.Position or Camera.CFrame.Position
+                if #targets > 0 then
+                    local closest, cd = nil, math.huge
+                    for _, t in ipairs(targets) do
+                        local ap = GetAimTarget(t)
+                        if ap then local d = (ap.Position - cPos).Magnitude; if d < cd then cd = d; closest = t end end
+                    end
+                    if closest then FabricateShoot(ShootRemote, closest) end
+                end
+            end
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════
+-- FLY
+-- ═══════════════════════════════════════
+local function StartFly()
+    local char = LocalPlayer.Character; if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+    StopFly()
+    FlyBV = Instance.new("BodyVelocity"); FlyBV.MaxForce = Vector3.new(math.huge,math.huge,math.huge); FlyBV.Velocity = Vector3.new(0,0,0); FlyBV.Parent = hrp
+    FlyBG = Instance.new("BodyGyro"); FlyBG.MaxTorque = Vector3.new(math.huge,math.huge,math.huge); FlyBG.D = 100; FlyBG.P = 10000; FlyBG.CFrame = hrp.CFrame; FlyBG.Parent = hrp
+    local hum = char:FindFirstChildOfClass("Humanoid"); if hum then hum.PlatformStand = true end
+end
+function StopFly()
+    if FlyBV then pcall(function() FlyBV:Destroy() end); FlyBV = nil end
+    if FlyBG then pcall(function() FlyBG:Destroy() end); FlyBG = nil end
+    local char = LocalPlayer.Character; if char then local hum = char:FindFirstChildOfClass("Humanoid"); if hum then hum.PlatformStand = false end end
+end
+UserInputService.InputBegan:Connect(function(input, gpe) if gpe then return end; if input.KeyCode==Enum.KeyCode.W then FlyKeys.W=true elseif input.KeyCode==Enum.KeyCode.A then FlyKeys.A=true elseif input.KeyCode==Enum.KeyCode.S then FlyKeys.S=true elseif input.KeyCode==Enum.KeyCode.D then FlyKeys.D=true elseif input.KeyCode==Enum.KeyCode.Space then FlyKeys.Space=true elseif input.KeyCode==Enum.KeyCode.LeftShift then FlyKeys.LShift=true end end)
+UserInputService.InputEnded:Connect(function(input, gpe) if input.KeyCode==Enum.KeyCode.W then FlyKeys.W=false elseif input.KeyCode==Enum.KeyCode.A then FlyKeys.A=false elseif input.KeyCode==Enum.KeyCode.S then FlyKeys.S=false elseif input.KeyCode==Enum.KeyCode.D then FlyKeys.D=false elseif input.KeyCode==Enum.KeyCode.Space then FlyKeys.Space=false elseif input.KeyCode==Enum.KeyCode.LeftShift then FlyKeys.LShift=false end end)
+
+-- ═══════════════════════════════════════
+-- ESP SYSTEM (usa hitboxes del workspace)
+-- ═══════════════════════════════════════
+local function CreateESP(player)
+    if ESPObjects[player] then return end
+    local obj = {lines = {}, name = nil, health = nil, distance = nil, tracer = nil, healthbar = nil, healthbarBG = nil}
+    for i = 1, 12 do local l = Drawing.new("Line"); l.Thickness = 1.2; l.Color = Colors.accent; l.Visible = false; obj.lines[i] = l end
+    obj.name = Drawing.new("Text"); obj.name.Size = 14; obj.name.Center = true; obj.name.Outline = true; obj.name.Color = Colors.white; obj.name.Visible = false
+    obj.health = Drawing.new("Text"); obj.health.Size = 13; obj.health.Center = false; obj.health.Outline = true; obj.health.Color = Colors.green; obj.health.Visible = false
+    obj.distance = Drawing.new("Text"); obj.distance.Size = 13; obj.distance.Center = true; obj.distance.Outline = true; obj.distance.Color = Colors.yellow; obj.distance.Visible = false
+    obj.tracer = Drawing.new("Line"); obj.tracer.Thickness = 1.2; obj.tracer.Color = Colors.accent; obj.tracer.Visible = false
+    obj.healthbarBG = Drawing.new("Line"); obj.healthbarBG.Thickness = 3; obj.healthbarBG.Color = Color3.fromRGB(40,40,40); obj.healthbarBG.Visible = false
+    obj.healthbar = Drawing.new("Line"); obj.healthbar.Thickness = 2; obj.healthbar.Color = Colors.green; obj.healthbar.Visible = false
+    ESPObjects[player] = obj
+end
+
+local function ClearESP(player)
+    local obj = ESPObjects[player]; if not obj then return end
+    for _, l in ipairs(obj.lines) do pcall(function() l:Remove() end) end
+    for _, k in ipairs({"name","health","distance","tracer","healthbar","healthbarBG"}) do if obj[k] then pcall(function() obj[k]:Remove() end) end end
+    ESPObjects[player] = nil
+end
+
+local function UpdateESP(player)
+    local obj = ESPObjects[player]; if not obj then return end
+    local function Hide()
+        for _, l in ipairs(obj.lines) do l.Visible = false end
+        obj.name.Visible = false; obj.health.Visible = false; obj.distance.Visible = false
+        obj.tracer.Visible = false; obj.healthbar.Visible = false; obj.healthbarBG.Visible = false
+    end
+    if not Config.Enabled or not Config.ESPEnabled or player == LocalPlayer or not IsAlive(player) or IsTeammate(player) then Hide(); return end
+
+    -- Usar hitboxes del workspace para ESP
+    local espCenter = GetESPCenter(player)
+    local headHB = GetPlayerHitboxes(player) -- headHB, bodyHB
+    local char = player.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+    if not espCenter or not hum then Hide(); return end
+
+    local dist = (espCenter.Position - Camera.CFrame.Position).Magnitude
+    if dist > Config.ESPMaxDistance then Hide(); return end
+
+    local headPart = headHB or (char and char:FindFirstChild("Head"))
+    if Config.ESPVisibleCheck and headPart and not IsVisible(headPart) then Hide(); return end
+
+    local vis = headPart and IsVisible(headPart)
+    local bc = vis and Colors.green or Colors.red
+
+    -- Calcular esquinas de la caja 3D
+    local cf, hX, hY, hZ
+
+    if espCenter:IsA("BasePart") then
+        -- Usar el CFrame y Size real de la hitbox
+        cf = espCenter.CFrame
+        hX = espCenter.Size.X / 2
+        hY = espCenter.Size.Y / 2
+        hZ = espCenter.Size.Z / 2
+        -- Asegurar tamaño mínimo visible
+        if hX < 0.5 then hX = 1.2 end
+        if hY < 1.0 then hY = 2.5 end
+        if hZ < 0.5 then hZ = 1.0 end
+    else
+        -- Fallback: usar posición con tamaño estándar
+        cf = CFrame.new(espCenter.Position)
+        hY = hum.RigType == Enum.HumanoidRigType.R15 and 2.75 or 2.5
+        hX = 1.2; hZ = 1.0
+    end
+
+    local c3 = {
+        cf*CFrame.new(-hX,hY,-hZ), cf*CFrame.new(hX,hY,-hZ), cf*CFrame.new(hX,hY,hZ), cf*CFrame.new(-hX,hY,hZ),
+        cf*CFrame.new(-hX,-hY,-hZ), cf*CFrame.new(hX,-hY,-hZ), cf*CFrame.new(hX,-hY,hZ), cf*CFrame.new(-hX,-hY,hZ),
+    }
+    local c2 = {}; local ok = true
+    for i, c in ipairs(c3) do local sp, on = Camera:WorldToViewportPoint(c.Position); if not on then ok = false; break end; c2[i] = Vector2.new(sp.X, sp.Y) end
+    if not ok then Hide(); return end
+
+    local edges = {{1,2},{2,3},{3,4},{4,1},{5,6},{6,7},{7,8},{8,5},{1,5},{2,6},{3,7},{4,8}}
+    if Config.ESPBoxes then
+        for i, e in ipairs(edges) do obj.lines[i].From = c2[e[1]]; obj.lines[i].To = c2[e[2]]; obj.lines[i].Color = bc; obj.lines[i].Visible = true end
+    else for _, l in ipairs(obj.lines) do l.Visible = false end end
+
+    local mnX, mnY, mxX, mxY = math.huge, math.huge, -math.huge, -math.huge
+    for _, c in ipairs(c2) do if c.X<mnX then mnX=c.X end; if c.Y<mnY then mnY=c.Y end; if c.X>mxX then mxX=c.X end; if c.Y>mxY then mxY=c.Y end end
+
+    if Config.ESPNames then obj.name.Text = player.DisplayName; obj.name.Position = Vector2.new((mnX+mxX)/2, mnY-18); obj.name.Visible = true else obj.name.Visible = false end
+    if Config.ESPDistance then obj.distance.Text = math.floor(dist).."m"; obj.distance.Position = Vector2.new((mnX+mxX)/2, mxY+3); obj.distance.Visible = true else obj.distance.Visible = false end
+    if Config.ESPHealth then
+        local hp = math.clamp(hum.Health/hum.MaxHealth,0,1); local bH = mxY-mnY; local bX = mnX-6
+        obj.healthbarBG.From = Vector2.new(bX,mnY); obj.healthbarBG.To = Vector2.new(bX,mxY); obj.healthbarBG.Visible = true
+        obj.healthbar.From = Vector2.new(bX,mxY); obj.healthbar.To = Vector2.new(bX,mxY-bH*hp)
+        obj.healthbar.Color = Color3.fromRGB(255*(1-hp),255*hp,50); obj.healthbar.Visible = true
+        obj.health.Text = math.floor(hum.Health).."hp"; obj.health.Position = Vector2.new(mxX+4,mnY)
+        obj.health.Color = Color3.fromRGB(255*(1-hp),255*hp,50); obj.health.Visible = true
+    else obj.health.Visible = false; obj.healthbar.Visible = false; obj.healthbarBG.Visible = false end
+    if Config.ESPTracers then
+        local vps = Camera.ViewportSize
+        local ts = Config.TracerOrigin=="Top" and Vector2.new(vps.X/2,0) or Config.TracerOrigin=="Center" and Vector2.new(vps.X/2,vps.Y/2) or Vector2.new(vps.X/2,vps.Y)
+        obj.tracer.From = ts; obj.tracer.To = Vector2.new((mnX+mxX)/2,mxY); obj.tracer.Color = bc; obj.tracer.Visible = true
+    else obj.tracer.Visible = false end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then CreateESP(p) end end
+Players.PlayerAdded:Connect(function(p) CreateESP(p) end)
+Players.PlayerRemoving:Connect(function(p) ClearESP(p) end)
+
+-- ═══════════════════════════════════════
+-- ANTI-AIM
+-- ═══════════════════════════════════════
+local aaAngle = 0; local aaJit = false; local aaJitT = 0
+local function GetAACF(dt)
+    if not Config.AntiAimEnabled then return nil end
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    local yO = math.rad(Config.AntiAimYaw); local pO = math.rad(Config.AntiAimPitch); local bY = 0
+    local m = Config.AntiAimMode
+    if m == "Spin" then aaAngle = aaAngle + dt*20; bY = aaAngle
+    elseif m == "Backwards" then local lv = hrp.CFrame.LookVector; bY = math.atan2(-lv.X,-lv.Z)+math.pi
+    elseif m == "Backwards at Targets" then
+        local cp, cd = nil, math.huge
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and IsAlive(p) and not IsTeammate(p) then
+                local pH = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+                if pH then local d = (pH.Position-hrp.Position).Magnitude; if d<cd then cd=d; cp=p end end
+            end
+        end
+        if cp and cp.Character then local tH = cp.Character:FindFirstChild("HumanoidRootPart"); if tH then local d=(tH.Position-hrp.Position); bY=math.atan2(d.X,d.Z)+math.pi end
+        else bY = math.atan2(-hrp.CFrame.LookVector.X,-hrp.CFrame.LookVector.Z) end
+    elseif m == "Random" then bY = math.random()*math.pi*2
+    elseif m == "Jitter" then aaJitT=aaJitT+dt; if aaJitT>=0.1 then aaJit=not aaJit; aaJitT=0 end; local lv=hrp.CFrame.LookVector; bY=math.atan2(-lv.X,-lv.Z)+(aaJit and 1.5 or -1.5)
+    elseif m == "Custom" then bY = 0 end
+    return CFrame.new(hrp.Position) * CFrame.Angles(pO, bY+yO, 0)
+end
+
+-- ═══════════════════════════════════════
+-- THIRD PERSON
+-- ═══════════════════════════════════════
+local function ForceTP()
+    if not Config.ThirdPersonEnabled then return end
+    pcall(function()
+        if LocalPlayer.CameraMode ~= Enum.CameraMode.Classic then LocalPlayer.CameraMode = Enum.CameraMode.Classic end
+        if LocalPlayer.CameraMinZoomDistance ~= Config.ThirdPersonDistance then LocalPlayer.CameraMinZoomDistance = Config.ThirdPersonDistance end
+        if LocalPlayer.CameraMaxZoomDistance ~= Config.ThirdPersonDistance then LocalPlayer.CameraMaxZoomDistance = Config.ThirdPersonDistance end
+    end)
+end
+RunService.RenderStepped:Connect(ForceTP)
+RunService.Heartbeat:Connect(ForceTP)
+RunService.Stepped:Connect(ForceTP)
+task.spawn(function() while true do task.wait(); ForceTP() end end)
+LocalPlayer:GetPropertyChangedSignal("CameraMode"):Connect(ForceTP)
+LocalPlayer:GetPropertyChangedSignal("CameraMinZoomDistance"):Connect(ForceTP)
+LocalPlayer:GetPropertyChangedSignal("CameraMaxZoomDistance"):Connect(ForceTP)
+
+-- ═══════════════════════════════════════
+-- MAIN LOOP
+-- ═══════════════════════════════════════
+local rightMouseDown = false
+UserInputService.InputBegan:Connect(function(input, gpe) if gpe then return end; if input.UserInputType == Enum.UserInputType.MouseButton2 then rightMouseDown = true end end)
+UserInputService.InputEnded:Connect(function(input, gpe) if input.UserInputType == Enum.UserInputType.MouseButton2 then rightMouseDown = false end end)
+
+RunService.RenderStepped:Connect(function(dt)
+    FOVCircle.Position = GetScreenCenter()
+    FOVCircle.Radius = Config.FOV
+    FOVCircle.Visible = Config.Enabled and Config.ShowFOV
+
+    for p, _ in pairs(ESPObjects) do UpdateESP(p) end
+
+    -- Aimbot (usa hitboxes)
+    if Config.Enabled and Config.AimbotEnabled and rightMouseDown then
+        local t = GetClosestTarget()
+        if t then
+            local ap = GetAimTarget(t)
+            if ap then
+                local sp, on = Camera:WorldToViewportPoint(ap.Position)
+                if on then local c = GetScreenCenter(); mousemoverel((sp.X-c.X)/Config.AimSmooth, (sp.Y-c.Y)/Config.AimSmooth) end
+            end
+        end
+    end
+
+    if Config.Enabled and Config.AntiAimEnabled then
+        local cf = GetAACF(dt)
+        if cf then local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"); if hrp then hrp.CFrame = CFrame.new(hrp.Position)*(cf-cf.Position) end end
+    end
+
+    if Config.Enabled and Config.FlyEnabled then
+        local char = LocalPlayer.Character; local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            if not FlyBV then StartFly() end
+            if FlyBV and FlyBG then
+                local camCF = Camera.CFrame; local md = Vector3.new(0,0,0)
+                if FlyKeys.W then md = md + camCF.LookVector end
+                if FlyKeys.S then md = md - camCF.LookVector end
+                if FlyKeys.A then md = md - camCF.RightVector end
+                if FlyKeys.D then md = md + camCF.RightVector end
+                if FlyKeys.Space then md = md + Vector3.new(0,1,0) end
+                if FlyKeys.LShift then md = md - Vector3.new(0,1,0) end
+                if md.Magnitude > 0 then md = md.Unit end
+                FlyBV.Velocity = md * Config.FlySpeed
+                FlyBG.CFrame = CFrame.new(hrp.Position, hrp.Position + camCF.LookVector)
+            end
+        end
+    else if FlyBV then StopFly() end end
+end)
+
+-- ═══════════════════════════════════════
+-- TRIGGERBOT
+-- ═══════════════════════════════════════
+task.spawn(function()
+    while true do
+        task.wait(0.01)
+        if Config.Enabled and Config.TriggerbotEnabled then
+            local origin = Camera.CFrame.Position; local dir = Camera.CFrame.LookVector * Config.MaxDistance
+            local rp = RaycastParams.new(); rp.FilterType = Enum.RaycastFilterType.Blacklist
+            local fl = {Camera}; if LocalPlayer.Character then table.insert(fl, LocalPlayer.Character) end; rp.FilterDescendantsInstances = fl
+            local result = workspace:Raycast(origin, dir, rp)
+            if result and result.Instance then
+                -- Check hitboxes too
+                local hitModel = result.Instance:FindFirstAncestorOfClass("Model")
+                local hp = hitModel and Players:GetPlayerFromCharacter(hitModel)
+                -- Also check if hit a hitbox in workspace
+                if not hp then
+                    for _, p in ipairs(Players:GetPlayers()) do
+                        local c = workspace:FindFirstChild(p.Name)
+                        if c and result.Instance:IsDescendantOf(c) then hp = p; break end
+                    end
+                end
+                if hp and hp ~= LocalPlayer and IsAlive(hp) and not IsTeammate(hp) then
+                    if Config.TriggerDelay > 0 then task.wait(Config.TriggerDelay/1000) end
+                    pcall(function() mouse1click() end)
+                end
+            end
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════
+-- AUTO SHOOT
+-- ═══════════════════════════════════════
+task.spawn(function()
+    while true do
+        task.wait(Config.AutoShootDelay / 1000)
+        if Config.Enabled and Config.AutoShootEnabled then
+            local t = GetClosestTarget()
+            if t then
+                if Config.SilentAimEnabled and ShootRemote then
+                    FabricateShoot(ShootRemote, t)
+                else
+                    pcall(function() mouse1click() end)
+                end
+            end
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════
+-- LINORIA UI
+-- ═══════════════════════════════════════
+local LinoriaURL = "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/"
+local Library = loadstring(game:HttpGet(LinoriaURL .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(LinoriaURL .. "addons/ThemeManager.lua"))()
+local SaveManager = loadstring(game:HttpGet(LinoriaURL .. "addons/SaveManager.lua"))()
+
+local Window = Library:CreateWindow({
+    Title = "ARTEMIS V2 - GUNACTION + HITBOXES",
+    Center = true, AutoShow = true, TabPadding = 2, MenuFadeTime = 0.15,
+})
+
+-- ═══ AIM ═══
+local AimTab = Window:AddTab("Aim")
+local AG = AimTab:AddLeftGroupbox("General")
+local AA = AimTab:AddRightGroupbox("Aimbot")
+AG:AddToggle("Enabled", {Text = "Activar ARTEMIS", Default = true}):AddKeyPicker("EnabledKey", {Default = "RightShift", NoUI = false, Text = "Toggle"})
+AG:AddToggle("ShowFOV", {Text = "Mostrar FOV Circle", Default = true})
+AG:AddSlider("FOV", {Text = "FOV Radius", Default = 250, Min = 50, Max = 800, Suffix = "px", Rounding = 0})
+AG:AddSlider("MaxDistance", {Text = "Max Distance", Default = 1000, Min = 100, Max = 5000, Suffix = "m", Rounding = 0})
+AG:AddToggle("TeamCheck", {Text = "Team Check", Default = true})
+AG:AddToggle("VisualCheck", {Text = "Visibility Check", Default = true})
+AG:AddDropdown("AimPart", {Values = {"Head","Body"}, Default = "Head", Text = "Aim Part (Hitbox)"})
+AA:AddToggle("AimbotEnabled", {Text = "Aimbot (Right Click)", Default = false})
+AA:AddSlider("AimSmooth", {Text = "Smoothing", Default = 25, Min = 1, Max = 100, Suffix = "", Rounding = 0})
+
+-- ═══ COMBAT ═══
+local CombatTab = Window:AddTab("Combat")
+local CS = CombatTab:AddLeftGroupbox("Silent Aim")
+local CE = CombatTab:AddRightGroupbox("Combat")
+local CK = CombatTab:AddLeftGroupbox("Kill Aura")
+local CAA = CombatTab:AddRightGroupbox("Anti-Aim")
+CS:AddToggle("SilentAimEnabled", {Text = "Silent Aim", Default = false, Tooltip = "Redirige a HeadHitbox/BodyHitbox"})
+CS:AddToggle("SilentAimDebug", {Text = "Debug", Default = false})
+CS:AddToggle("NoSpread", {Text = "No Spread", Default = false})
+CE:AddToggle("TriggerbotEnabled", {Text = "Triggerbot", Default = false})
+CE:AddSlider("TriggerDelay", {Text = "Trigger Delay", Default = 0, Min = 0, Max = 500, Suffix = "ms", Rounding = 0})
+CE:AddDivider()
+CE:AddToggle("AutoShootEnabled", {Text = "Auto Shoot", Default = false})
+CE:AddSlider("AutoShootDelay", {Text = "Auto Shoot Delay", Default = 100, Min = 10, Max = 1000, Suffix = "ms", Rounding = 0})
+CK:AddToggle("KillAuraEnabled", {Text = "Kill Aura", Default = false})
+CK:AddSlider("KillAuraRange", {Text = "KA Range", Default = 50, Min = 10, Max = 500, Suffix = "m", Rounding = 0})
+CK:AddSlider("KillAuraDelay", {Text = "KA Delay", Default = 50, Min = 10, Max = 500, Suffix = "ms", Rounding = 0})
+CK:AddToggle("KillAuraMulti", {Text = "Multi Target", Default = false})
+CAA:AddToggle("AntiAimEnabled", {Text = "Anti-Aim", Default = false})
+CAA:AddDropdown("AntiAimMode", {Values = {"Spin","Backwards","Backwards at Targets","Random","Jitter","Custom"}, Default = "Spin", Text = "AA Mode"})
+CAA:AddSlider("AntiAimYaw", {Text = "Yaw Offset", Default = 0, Min = -180, Max = 180, Suffix = "°", Rounding = 0})
+CAA:AddSlider("AntiAimPitch", {Text = "Pitch Offset", Default = 0, Min = -90, Max = 90, Suffix = "°", Rounding = 0})
+
+-- ═══ MOVEMENT ═══
+local MoveTab = Window:AddTab("Movement")
+local MF = MoveTab:AddLeftGroupbox("Fly")
+local MTP = MoveTab:AddRightGroupbox("Camera")
+MF:AddToggle("FlyEnabled", {Text = "Fly", Default = false})
+MF:AddSlider("FlySpeed", {Text = "Fly Speed", Default = 50, Min = 10, Max = 500, Suffix = "", Rounding = 0})
+MF:AddLabel("WASD+Space+Shift")
+MTP:AddToggle("ThirdPersonEnabled", {Text = "Third Person", Default = false})
+MTP:AddSlider("ThirdPersonDistance", {Text = "TP Distance", Default = 15, Min = 5, Max = 50, Suffix = "m", Rounding = 0})
+
+-- ═══ VISUALS ═══
+local VisTab = Window:AddTab("Visuals")
+local VE = VisTab:AddLeftGroupbox("ESP")
+local VO = VisTab:AddRightGroupbox("ESP Options")
+VE:AddToggle("ESPEnabled", {Text = "ESP", Default = true})
+VE:AddToggle("ESPBoxes", {Text = "3D Boxes (Hitbox)", Default = true})
+VE:AddToggle("ESPNames", {Text = "Names", Default = true})
+VE:AddToggle("ESPHealth", {Text = "Health", Default = true})
+VE:AddToggle("ESPDistance", {Text = "Distance", Default = true})
+VE:AddToggle("ESPTracers", {Text = "Tracers", Default = true})
+VO:AddToggle("ESPVisibleCheck", {Text = "Visible Check", Default = false})
+VO:AddSlider("ESPMaxDistance", {Text = "Max Distance", Default = 1500, Min = 100, Max = 5000, Suffix = "m", Rounding = 0})
+VO:AddDropdown("TracerOrigin", {Values = {"Bottom","Center","Top"}, Default = "Bottom", Text = "Tracer Origin"})
+
+-- ═══ UI ═══
+local UITab = Window:AddTab("UI Settings")
+local MG = UITab:AddLeftGroupbox("Menu")
+MG:AddButton("Unload ARTEMIS", function() if genv.ARTEMIS_CLEANUP then pcall(genv.ARTEMIS_CLEANUP) end; Library:Unload() end)
+MG:AddLabel("Menu bind: RightShift")
+local TG = UITab:AddRightGroupbox("Theme")
+ThemeManager:SetLibrary(Library); SaveManager:SetLibrary(Library)
+ThemeManager:SetFolder("ARTEMIS_V2_GA"); SaveManager:SetFolder("ARTEMIS_V2_GA")
+ThemeManager:ApplyToGroupbox(TG); SaveManager:BuildConfigSection(UITab)
+Library.ToggleKeybind = Options.EnabledKey
+
+-- ═══════════════════════════════════════
+-- BIND UI → CONFIG
+-- ═══════════════════════════════════════
+Toggles.Enabled:OnChanged(function() Config.Enabled = Toggles.Enabled.Value end)
+Toggles.ShowFOV:OnChanged(function() Config.ShowFOV = Toggles.ShowFOV.Value end)
+Options.FOV:OnChanged(function() Config.FOV = Options.FOV.Value end)
+Options.MaxDistance:OnChanged(function() Config.MaxDistance = Options.MaxDistance.Value end)
+Toggles.TeamCheck:OnChanged(function() Config.TeamCheck = Toggles.TeamCheck.Value end)
+Toggles.VisualCheck:OnChanged(function() Config.VisualCheck = Toggles.VisualCheck.Value end)
+Options.AimPart:OnChanged(function() Config.AimPart = Options.AimPart.Value end)
+Toggles.AimbotEnabled:OnChanged(function() Config.AimbotEnabled = Toggles.AimbotEnabled.Value end)
+Options.AimSmooth:OnChanged(function() Config.AimSmooth = Options.AimSmooth.Value end)
+Toggles.SilentAimEnabled:OnChanged(function() Config.SilentAimEnabled = Toggles.SilentAimEnabled.Value end)
+Toggles.SilentAimDebug:OnChanged(function() Config.SilentAimDebug = Toggles.SilentAimDebug.Value end)
+Toggles.NoSpread:OnChanged(function() Config.NoSpread = Toggles.NoSpread.Value end)
+Toggles.TriggerbotEnabled:OnChanged(function() Config.TriggerbotEnabled = Toggles.TriggerbotEnabled.Value end)
+Options.TriggerDelay:OnChanged(function() Config.TriggerDelay = Options.TriggerDelay.Value end)
+Toggles.AutoShootEnabled:OnChanged(function() Config.AutoShootEnabled = Toggles.AutoShootEnabled.Value end)
+Options.AutoShootDelay:OnChanged(function() Config.AutoShootDelay = Options.AutoShootDelay.Value end)
+Toggles.KillAuraEnabled:OnChanged(function() Config.KillAuraEnabled = Toggles.KillAuraEnabled.Value end)
+Options.KillAuraRange:OnChanged(function() Config.KillAuraRange = Options.KillAuraRange.Value end)
+Options.KillAuraDelay:OnChanged(function() Config.KillAuraDelay = Options.KillAuraDelay.Value end)
+Toggles.KillAuraMulti:OnChanged(function() Config.KillAuraMulti = Toggles.KillAuraMulti.Value end)
+Toggles.FlyEnabled:OnChanged(function() Config.FlyEnabled = Toggles.FlyEnabled.Value; if not Config.FlyEnabled then StopFly() end end)
+Options.FlySpeed:OnChanged(function() Config.FlySpeed = Options.FlySpeed.Value end)
+Toggles.ESPEnabled:OnChanged(function() Config.ESPEnabled = Toggles.ESPEnabled.Value end)
+Toggles.ESPBoxes:OnChanged(function() Config.ESPBoxes = Toggles.ESPBoxes.Value end)
+Toggles.ESPNames:OnChanged(function() Config.ESPNames = Toggles.ESPNames.Value end)
+Toggles.ESPHealth:OnChanged(function() Config.ESPHealth = Toggles.ESPHealth.Value end)
+Toggles.ESPDistance:OnChanged(function() Config.ESPDistance = Toggles.ESPDistance.Value end)
+Toggles.ESPTracers:OnChanged(function() Config.ESPTracers = Toggles.ESPTracers.Value end)
+Toggles.ESPVisibleCheck:OnChanged(function() Config.ESPVisibleCheck = Toggles.ESPVisibleCheck.Value end)
+Options.ESPMaxDistance:OnChanged(function() Config.ESPMaxDis--[[
+    ╔═══════════════════════════════════════════╗
+    ║      ARTEMIS V2 - GUNACTION + HITBOXES    ║
+    ║  ESP/Silent Aim con HeadHitbox/BodyHitbox  ║
+    ║  Soporte Escopeta (multi-pellet)           ║
+    ╚═══════════════════════════════════════════╝
+]]
+
+-- ═══════════════════════════════════════
+-- CLEANUP
+-- ═══════════════════════════════════════
+local genv = (getgenv and getgenv()) or _G
+if genv.ARTEMIS_CLEANUP then
+    pcall(genv.ARTEMIS_CLEANUP)
+    task.wait(0.1)
+end
+
+-- ═══════════════════════════════════════
+-- SERVICES
+-- ═══════════════════════════════════════
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- ═══════════════════════════════════════
+-- REMOTE
+-- ═══════════════════════════════════════
+local ShootRemote = nil
+pcall(function()
+    ShootRemote = game:GetService("ReplicatedStorage")
+        :WaitForChild("Networking", 15)
+        :WaitForChild("Remotes", 10)
+        :WaitForChild("GunAction", 10)
+end)
+if not ShootRemote then
+    task.spawn(function()
+        for i = 1, 10 do
+            task.wait(3)
+            local ok, rem = pcall(function()
+                return game:GetService("ReplicatedStorage")
+                    :WaitForChild("Networking", 5)
+                    :WaitForChild("Remotes", 5)
+                    :WaitForChild("GunAction", 5)
+            end)
+            if ok and rem then ShootRemote = rem; print("[ARTEMIS] Remote encontrado!"); break end
+        end
+    end)
+end
+
+-- ═══════════════════════════════════════
+-- CONFIG
+-- ═══════════════════════════════════════
+local Config = {
+    Enabled = true,
+    ShowFOV = true,
+    FOV = 250,
+    MaxDistance = 1000,
+    TeamCheck = true,
+    AimPart = "Head",
+    VisualCheck = true,
+
+    AimbotEnabled = false,
+    AimSmooth = 25,
+
+    SilentAimEnabled = false,
+    SilentAimDebug = false,
+    NoSpread = false,
+
+    TriggerbotEnabled = false,
+    TriggerDelay = 0,
+
+    AutoShootEnabled = false,
+    AutoShootDelay = 100,
+
+    KillAuraEnabled = false,
+    KillAuraRange = 50,
+    KillAuraDelay = 50,
+    KillAuraMulti = false,
+
+    FlyEnabled = false,
+    FlySpeed = 50,
+
+    ESPEnabled = true,
+    ESPBoxes = true,
+    ESPNames = true,
+    ESPHealth = true,
+    ESPDistance = true,
+    ESPTracers = true,
+    ESPMaxDistance = 1500,
+    ESPVisibleCheck = false,
+    TracerOrigin = "Bottom",
+
+    ThirdPersonEnabled = false,
+    ThirdPersonDistance = 15,
+
+    AntiAimEnabled = false,
+    AntiAimMode = "Spin",
+    AntiAimYaw = 0,
+    AntiAimPitch = 0,
+}
+
+-- ═══════════════════════════════════════
+-- COLORS
+-- ═══════════════════════════════════════
+local Colors = {
+    accent = Color3.fromRGB(166, 104, 255),
+    green = Color3.fromRGB(86, 214, 154),
+    red = Color3.fromRGB(255, 95, 116),
+    yellow = Color3.fromRGB(255, 214, 102),
+    white = Color3.fromRGB(255, 255, 255),
+}
+
+local OriginalCamMode = LocalPlayer.CameraMode
+local OriginalMinZoom = LocalPlayer.CameraMinZoomDistance
+local OriginalMaxZoom = LocalPlayer.CameraMaxZoomDistance
+
+local ESPObjects = {}
+local isModifying = false
+
+local StoredData = {
+    weaponId = 1,
+    flag = false,
+    stat = 2.15,
+    origin = Vector3.new(0, 0, 0),
+}
+
+local FlyBV = nil
+local FlyBG = nil
+local FlyKeys = { W=false, A=false, S=false, D=false, Space=false, LShift=false }
+
+-- ═══════════════════════════════════════
+-- FOV CIRCLE
+-- ═══════════════════════════════════════
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1.5
+FOVCircle.NumSides = 80
+FOVCircle.Filled = false
+FOVCircle.Transparency = 0.8
+FOVCircle.Color = Colors.accent
+FOVCircle.Visible = false
+FOVCircle.Radius = Config.FOV
+
+-- ═══════════════════════════════════════
+-- HITBOX FINDER
+-- El juego usa hitboxes custom en workspace:
+--   workspace.[PlayerName].HeadHitbox
+--   workspace.[PlayerName].BodyHitbox
+-- ═══════════════════════════════════════
+local function GetPlayerHitboxes(player)
+    -- Buscar container con el nombre del jugador en workspace
+    local container = workspace:FindFirstChild(player.Name)
+
+    -- Si no existe con el nombre exacto, buscar por DisplayName
+    if not container then
+        container = workspace:FindFirstChild(player.DisplayName)
+    end
+
+    -- Si aún no, buscar en todos los hijos de workspace
+    if not container then
+        for _, child in ipairs(workspace:GetChildren()) do
+            if child.Name == player.Name or child.Name == player.DisplayName then
+                container = child
+                break
+            end
+        end
+    end
+
+    if not container then return nil, nil end
+
+    local headHB = container:FindFirstChild("HeadHitbox")
+    local bodyHB = container:FindFirstChild("BodyHitbox")
+
+    return headHB, bodyHB
+end
+
+-- Obtener la mejor parte para apuntar según Config.AimPart
+local function GetAimTarget(player)
+    local headHB, bodyHB = GetPlayerHitboxes(player)
+
+    if Config.AimPart == "Head" then
+        if headHB then return headHB end
+        -- Fallback al Head del character
+        if player.Character then
+            local h = player.Character:FindFirstChild("Head")
+            if h then return h end
+        end
+    else
+        -- Body / HRP / Torso
+        if bodyHB then return bodyHB end
+        if player.Character then
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then return hrp end
+            local torso = player.Character:FindFirstChild("UpperTorso") or player.Character:FindFirstChild("Torso")
+            if torso then return torso end
+        end
+    end
+
+    return headHB or bodyHB
+end
+
+-- Obtener la parte central para ESP (BodyHitbox o HRP)
+local function GetESPCenter(player)
+    local _, bodyHB = GetPlayerHitboxes(player)
+    if bodyHB and bodyHB:IsA("BasePart") then return bodyHB end
+
+    if player.Character then
+        local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then return hrp end
+        local _, bHB = GetPlayerHitboxes(player)
+        if bHB then return bHB end
+    end
+
+    return nil
+end
+
+-- ═══════════════════════════════════════
+-- UTILITIES
+-- ═══════════════════════════════════════
+local function GetScreenCenter()
+    local vps = Camera.ViewportSize
+    return Vector2.new(vps.X / 2, vps.Y / 2)
+end
+
+local function IsAlive(player)
+    if not player or not player.Character then return false end
+    local hum = player.Character:FindFirstChildOfClass("Humanoid")
+    return hum and hum.Health > 0
+end
+
+local function IsTeammate(player)
+    if not Config.TeamCheck then return false end
+    if not LocalPlayer.Team or not player.Team then return false end
+    return LocalPlayer.Team == player.Team
+end
+
+local function IsVisible(part)
+    if not part then return false end
+    local origin = Camera.CFrame.Position
+    local rp = RaycastParams.new()
+    rp.FilterType = Enum.RaycastFilterType.Blacklist
+    local fl = {Camera}
+    if LocalPlayer.Character then table.insert(fl, LocalPlayer.Character) end
+    -- También excluir hitboxes del workspace para no bloquear raycast
+    for _, p in ipairs(Players:GetPlayers()) do
+        local c = workspace:FindFirstChild(p.Name)
+        if c then table.insert(fl, c) end
+    end
+    rp.FilterDescendantsInstances = fl
+    local result = workspace:Raycast(origin, part.Position - origin, rp)
+    if not result then return true end
+    if result.Instance:IsDescendantOf(part.Parent) then return true end
+    return false
+end
+
+-- ═══════════════════════════════════════
+-- TARGET SELECTION (usa hitboxes)
+-- ═══════════════════════════════════════
+local function GetClosestTarget()
+    local closest, closestDist = nil, math.huge
+    local sc = GetScreenCenter()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and IsAlive(p) and not IsTeammate(p) then
+            local aimPart = GetAimTarget(p)
+            if aimPart then
+                local sp, on = Camera:WorldToViewportPoint(aimPart.Position)
+                if on then
+                    local sd = (Vector2.new(sp.X, sp.Y) - sc).Magnitude
+                    if sd <= Config.FOV then
+                        local wd = (aimPart.Position - Camera.CFrame.Position).Magnitude
+                        if wd <= Config.MaxDistance and (not Config.VisualCheck or IsVisible(aimPart)) then
+                            if sd < closestDist then closestDist = sd; closest = p end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function GetTargetsInRange(range)
+    local targets = {}
+    local char = LocalPlayer.Character
+    if not char then return targets end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local center = hrp and hrp.Position or Camera.CFrame.Position
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and IsAlive(p) and not IsTeammate(p) then
+            local aimPart = GetAimTarget(p)
+            if aimPart and (aimPart.Position - center).Magnitude <= range then
+                table.insert(targets, p)
+            end
+        end
+    end
+    return targets
+end
+
+-- ═══════════════════════════════════════
+-- SHOTGUN PELLET GENERATOR
+-- Genera posiciones de pellets alrededor
+-- del target con spread cónico natural
+-- ═══════════════════════════════════════
+local function GeneratePelletPositions(targetPos, origin, pelletCount)
+    local positions = {}
+    local dist = (targetPos - origin).Magnitude
+    -- Spread radius scales with distance (shotgun cone)
+    local spreadRadius = math.max(0.3, dist * 0.015)
+
+    for i = 1, pelletCount do
+        positions[i] = targetPos + Vector3.new(
+            math.random(-spreadRadius * 100, spreadRadius * 100) / 100,
+            math.random(-spreadRadius * 100, spreadRadius * 100) / 100,
+            math.random(-spreadRadius * 100, spreadRadius * 100) / 100
+        )
+    end
+    return positions
+end
+
+-- ═══════════════════════════════════════
+-- SILENT AIM LOGIC
+--
+-- Redirects:
+--   args[4] = direction → toward target HeadHitbox
+--   args[7] = hit positions → around target (shotgun support)
+--   args[8] = final hit → target HeadHitbox position
+-- ═══════════════════════════════════════
+local function RedirectShootArgs(args, target)
+    local aimPart = GetAimTarget(target)
+    if not aimPart then return false end
+
+    local origin = typeof(args[3]) == "Vector3" and args[3] or Camera.CFrame.Position
+    local targetPos = aimPart.Position
+    local newDir = (targetPos - origin).Unit
+
+    -- args[4] = direction
+    args[4] = newDir
+
+    -- args[7] = hit positions (single or shotgun)
+    if typeof(args[7]) == "table" then
+        local pelletCount = #args[7]
+        if pelletCount > 1 then
+            -- SHOTGUN: generate spread around target
+            args[7] = GeneratePelletPositions(targetPos, origin, pelletCount)
+        elseif pelletCount == 1 then
+            -- Single shot
+            args[7] = { targetPos }
+        end
+    end
+
+    -- args[8] = final hit position
+    args[8] = targetPos
+
+    return true
+end
+
+-- ═══════════════════════════════════════
+-- FABRICATE SHOOT (Kill Aura / AutoShoot)
+-- ═══════════════════════════════════════
+local function FabricateShoot(remote, target, originOverride)
+    if not remote or not target then return end
+    local aimPart = GetAimTarget(target)
+    if not aimPart then return end
+
+    local origin = originOverride or Camera.CFrame.Position
+    local targetPos = aimPart.Position
+    local dir = (targetPos - origin).Unit
+
+    -- Detectar si es escopeta (último disparo tuvo >1 pellet)
+    local pelletCount = StoredData.lastPelletCount or 1
+    local pellets = {}
+    if pelletCount > 1 then
+        pellets = GeneratePelletPositions(targetPos, origin, pelletCount)
+    else
+        pellets = { targetPos }
+    end
+
+    local shootArgs = {
+        "Shoot",
+        StoredData.weaponId,
+        origin,
+        dir,
+        StoredData.flag,
+        StoredData.stat,
+        pellets,
+        targetPos,
+    }
+
+    isModifying = true
+    pcall(function()
+        remote:FireServer(unpack(shootArgs))
+    end)
+    isModifying = false
+end
+
+-- ═══════════════════════════════════════
+-- HOOK __namecall
+-- ═══════════════════════════════════════
+local OldNamecall
+OldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+    if isModifying then
+        return OldNamecall(self, ...)
+    end
+
+    local method = getnamecallmethod()
+
+    if method == "FireServer" and typeof(self) == "Instance"
+       and self:IsA("RemoteEvent") and self.Name == "GunAction" then
+
+        local args = {...}
+        local actionType = args[1]
+
+        -- Almacenar datos
+        if typeof(args[2]) == "number" then StoredData.weaponId = args[2] end
+        if typeof(args[3]) == "Vector3" then StoredData.origin = args[3] end
+        if typeof(args[5]) == "boolean" then StoredData.flag = args[5] end
+        if typeof(args[6]) == "number" then StoredData.stat = args[6] end
+        if typeof(args[7]) == "table" then StoredData.lastPelletCount = #args[7] end
+
+        -- ═══ "Shoot" ACTION ═══
+        if actionType == "Shoot" then
+
+            -- SILENT AIM
+            if Config.Enabled and Config.SilentAimEnabled then
+                local target = GetClosestTarget()
+
+                if target then
+                    local newArgs = {
+                        args[1], args[2], args[3], args[4],
+                        args[5], args[6], args[7], args[8]
+                    }
+                    if typeof(newArgs[7]) == "table" then
+                        local cloned = {}
+                        for i, v in ipairs(newArgs[7]) do cloned[i] = v end
+                        newArgs[7] = cloned
+                    end
+
+                    local redirected = RedirectShootArgs(newArgs, target)
+
+                    if redirected then
+                        isModifying = true
+                        local r = self:FireServer(unpack(newArgs))
+                        isModifying = false
+
+                        if Config.SilentAimDebug then
+                            local aimPart = GetAimTarget(target)
+                            local pellets = typeof(newArgs[7]) == "table" and #newArgs[7] or 1
+                            print("[ARTEMIS] Silent → " .. target.Name .. " | " .. (aimPart and aimPart.Name or "?") .. " | " .. pellets .. " pellets")
+                        end
+
+                        return r
+                    end
+                end
+                -- No target → dejar pasar
+
+            -- NO SPREAD
+            elseif Config.NoSpread then
+                if typeof(args[3]) == "Vector3" and typeof(args[7]) == "table" and #args[7] > 0 then
+                    local origin = args[3]
+                    local hitPos = args[7][1]
+                    if typeof(hitPos) == "Vector3" then
+                        local cleanDir = (hitPos - origin).Unit
+                        local newArgs = {
+                            args[1], args[2], args[3], cleanDir,
+                            args[5], args[6], args[7], args[8]
+                        }
+                        isModifying = true
+                        local r = self:FireServer(unpack(newArgs))
+                        isModifying = false
+                        return r
+                    end
+                end
+            end
+        end
+    end
+
+    return OldNamecall(self, ...)
+end))
+
+-- ═══════════════════════════════════════
+-- KILL AURA
+-- ═══════════════════════════════════════
+task.spawn(function()
+    while true do
+        task.wait(Config.KillAuraDelay / 1000)
+        if Config.Enabled and Config.KillAuraEnabled and ShootRemote then
+            local targets = GetTargetsInRange(Config.KillAuraRange)
+            if Config.KillAuraMulti then
+                for _, t in ipairs(targets) do FabricateShoot(ShootRemote, t) end
+            else
+                local center = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                local cPos = center and center.Position or Camera.CFrame.Position
+                if #targets > 0 then
+                    local closest, cd = nil, math.huge
+                    for _, t in ipairs(targets) do
+                        local ap = GetAimTarget(t)
+                        if ap then local d = (ap.Position - cPos).Magnitude; if d < cd then cd = d; closest = t end end
+                    end
+                    if closest then FabricateShoot(ShootRemote, closest) end
+                end
+            end
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════
+-- FLY
+-- ═══════════════════════════════════════
+local function StartFly()
+    local char = LocalPlayer.Character; if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+    StopFly()
+    FlyBV = Instance.new("BodyVelocity"); FlyBV.MaxForce = Vector3.new(math.huge,math.huge,math.huge); FlyBV.Velocity = Vector3.new(0,0,0); FlyBV.Parent = hrp
+    FlyBG = Instance.new("BodyGyro"); FlyBG.MaxTorque = Vector3.new(math.huge,math.huge,math.huge); FlyBG.D = 100; FlyBG.P = 10000; FlyBG.CFrame = hrp.CFrame; FlyBG.Parent = hrp
+    local hum = char:FindFirstChildOfClass("Humanoid"); if hum then hum.PlatformStand = true end
+end
+function StopFly()
+    if FlyBV then pcall(function() FlyBV:Destroy() end); FlyBV = nil end
+    if FlyBG then pcall(function() FlyBG:Destroy() end); FlyBG = nil end
+    local char = LocalPlayer.Character; if char then local hum = char:FindFirstChildOfClass("Humanoid"); if hum then hum.PlatformStand = false end end
+end
+UserInputService.InputBegan:Connect(function(input, gpe) if gpe then return end; if input.KeyCode==Enum.KeyCode.W then FlyKeys.W=true elseif input.KeyCode==Enum.KeyCode.A then FlyKeys.A=true elseif input.KeyCode==Enum.KeyCode.S then FlyKeys.S=true elseif input.KeyCode==Enum.KeyCode.D then FlyKeys.D=true elseif input.KeyCode==Enum.KeyCode.Space then FlyKeys.Space=true elseif input.KeyCode==Enum.KeyCode.LeftShift then FlyKeys.LShift=true end end)
+UserInputService.InputEnded:Connect(function(input, gpe) if input.KeyCode==Enum.KeyCode.W then FlyKeys.W=false elseif input.KeyCode==Enum.KeyCode.A then FlyKeys.A=false elseif input.KeyCode==Enum.KeyCode.S then FlyKeys.S=false elseif input.KeyCode==Enum.KeyCode.D then FlyKeys.D=false elseif input.KeyCode==Enum.KeyCode.Space then FlyKeys.Space=false elseif input.KeyCode==Enum.KeyCode.LeftShift then FlyKeys.LShift=false end end)
+
+-- ═══════════════════════════════════════
+-- ESP SYSTEM (usa hitboxes del workspace)
+-- ═══════════════════════════════════════
+local function CreateESP(player)
+    if ESPObjects[player] then return end
+    local obj = {lines = {}, name = nil, health = nil, distance = nil, tracer = nil, healthbar = nil, healthbarBG = nil}
+    for i = 1, 12 do local l = Drawing.new("Line"); l.Thickness = 1.2; l.Color = Colors.accent; l.Visible = false; obj.lines[i] = l end
+    obj.name = Drawing.new("Text"); obj.name.Size = 14; obj.name.Center = true; obj.name.Outline = true; obj.name.Color = Colors.white; obj.name.Visible = false
+    obj.health = Drawing.new("Text"); obj.health.Size = 13; obj.health.Center = false; obj.health.Outline = true; obj.health.Color = Colors.green; obj.health.Visible = false
+    obj.distance = Drawing.new("Text"); obj.distance.Size = 13; obj.distance.Center = true; obj.distance.Outline = true; obj.distance.Color = Colors.yellow; obj.distance.Visible = false
+    obj.tracer = Drawing.new("Line"); obj.tracer.Thickness = 1.2; obj.tracer.Color = Colors.accent; obj.tracer.Visible = false
+    obj.healthbarBG = Drawing.new("Line"); obj.healthbarBG.Thickness = 3; obj.healthbarBG.Color = Color3.fromRGB(40,40,40); obj.healthbarBG.Visible = false
+    obj.healthbar = Drawing.new("Line"); obj.healthbar.Thickness = 2; obj.healthbar.Color = Colors.green; obj.healthbar.Visible = false
+    ESPObjects[player] = obj
+end
+
+local function ClearESP(player)
+    local obj = ESPObjects[player]; if not obj then return end
+    for _, l in ipairs(obj.lines) do pcall(function() l:Remove() end) end
+    for _, k in ipairs({"name","health","distance","tracer","healthbar","healthbarBG"}) do if obj[k] then pcall(function() obj[k]:Remove() end) end end
+    ESPObjects[player] = nil
+end
+
+local function UpdateESP(player)
+    local obj = ESPObjects[player]; if not obj then return end
+    local function Hide()
+        for _, l in ipairs(obj.lines) do l.Visible = false end
+        obj.name.Visible = false; obj.health.Visible = false; obj.distance.Visible = false
+        obj.tracer.Visible = false; obj.healthbar.Visible = false; obj.healthbarBG.Visible = false
+    end
+    if not Config.Enabled or not Config.ESPEnabled or player == LocalPlayer or not IsAlive(player) or IsTeammate(player) then Hide(); return end
+
+    -- Usar hitboxes del workspace para ESP
+    local espCenter = GetESPCenter(player)
+    local headHB = GetPlayerHitboxes(player) -- headHB, bodyHB
+    local char = player.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+    if not espCenter or not hum then Hide(); return end
+
+    local dist = (espCenter.Position - Camera.CFrame.Position).Magnitude
+    if dist > Config.ESPMaxDistance then Hide(); return end
+
+    local headPart = headHB or (char and char:FindFirstChild("Head"))
+    if Config.ESPVisibleCheck and headPart and not IsVisible(headPart) then Hide(); return end
+
+    local vis = headPart and IsVisible(headPart)
+    local bc = vis and Colors.green or Colors.red
+
+    -- Calcular esquinas de la caja 3D
+    local cf, hX, hY, hZ
+
+    if espCenter:IsA("BasePart") then
+        -- Usar el CFrame y Size real de la hitbox
+        cf = espCenter.CFrame
+        hX = espCenter.Size.X / 2
+        hY = espCenter.Size.Y / 2
+        hZ = espCenter.Size.Z / 2
+        -- Asegurar tamaño mínimo visible
+        if hX < 0.5 then hX = 1.2 end
+        if hY < 1.0 then hY = 2.5 end
+        if hZ < 0.5 then hZ = 1.0 end
+    else
+        -- Fallback: usar posición con tamaño estándar
+        cf = CFrame.new(espCenter.Position)
+        hY = hum.RigType == Enum.HumanoidRigType.R15 and 2.75 or 2.5
+        hX = 1.2; hZ = 1.0
+    end
+
+    local c3 = {
+        cf*CFrame.new(-hX,hY,-hZ), cf*CFrame.new(hX,hY,-hZ), cf*CFrame.new(hX,hY,hZ), cf*CFrame.new(-hX,hY,hZ),
+        cf*CFrame.new(-hX,-hY,-hZ), cf*CFrame.new(hX,-hY,-hZ), cf*CFrame.new(hX,-hY,hZ), cf*CFrame.new(-hX,-hY,hZ),
+    }
+    local c2 = {}; local ok = true
+    for i, c in ipairs(c3) do local sp, on = Camera:WorldToViewportPoint(c.Position); if not on then ok = false; break end; c2[i] = Vector2.new(sp.X, sp.Y) end
+    if not ok then Hide(); return end
+
+    local edges = {{1,2},{2,3},{3,4},{4,1},{5,6},{6,7},{7,8},{8,5},{1,5},{2,6},{3,7},{4,8}}
+    if Config.ESPBoxes then
+        for i, e in ipairs(edges) do obj.lines[i].From = c2[e[1]]; obj.lines[i].To = c2[e[2]]; obj.lines[i].Color = bc; obj.lines[i].Visible = true end
+    else for _, l in ipairs(obj.lines) do l.Visible = false end end
+
+    local mnX, mnY, mxX, mxY = math.huge, math.huge, -math.huge, -math.huge
+    for _, c in ipairs(c2) do if c.X<mnX then mnX=c.X end; if c.Y<mnY then mnY=c.Y end; if c.X>mxX then mxX=c.X end; if c.Y>mxY then mxY=c.Y end end
+
+    if Config.ESPNames then obj.name.Text = player.DisplayName; obj.name.Position = Vector2.new((mnX+mxX)/2, mnY-18); obj.name.Visible = true else obj.name.Visible = false end
+    if Config.ESPDistance then obj.distance.Text = math.floor(dist).."m"; obj.distance.Position = Vector2.new((mnX+mxX)/2, mxY+3); obj.distance.Visible = true else obj.distance.Visible = false end
+    if Config.ESPHealth then
+        local hp = math.clamp(hum.Health/hum.MaxHealth,0,1); local bH = mxY-mnY; local bX = mnX-6
+        obj.healthbarBG.From = Vector2.new(bX,mnY); obj.healthbarBG.To = Vector2.new(bX,mxY); obj.healthbarBG.Visible = true
+        obj.healthbar.From = Vector2.new(bX,mxY); obj.healthbar.To = Vector2.new(bX,mxY-bH*hp)
+        obj.healthbar.Color = Color3.fromRGB(255*(1-hp),255*hp,50); obj.healthbar.Visible = true
+        obj.health.Text = math.floor(hum.Health).."hp"; obj.health.Position = Vector2.new(mxX+4,mnY)
+        obj.health.Color = Color3.fromRGB(255*(1-hp),255*hp,50); obj.health.Visible = true
+    else obj.health.Visible = false; obj.healthbar.Visible = false; obj.healthbarBG.Visible = false end
+    if Config.ESPTracers then
+        local vps = Camera.ViewportSize
+        local ts = Config.TracerOrigin=="Top" and Vector2.new(vps.X/2,0) or Config.TracerOrigin=="Center" and Vector2.new(vps.X/2,vps.Y/2) or Vector2.new(vps.X/2,vps.Y)
+        obj.tracer.From = ts; obj.tracer.To = Vector2.new((mnX+mxX)/2,mxY); obj.tracer.Color = bc; obj.tracer.Visible = true
+    else obj.tracer.Visible = false end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer then CreateESP(p) end end
+Players.PlayerAdded:Connect(function(p) CreateESP(p) end)
+Players.PlayerRemoving:Connect(function(p) ClearESP(p) end)
+
+-- ═══════════════════════════════════════
+-- ANTI-AIM
+-- ═══════════════════════════════════════
+local aaAngle = 0; local aaJit = false; local aaJitT = 0
+local function GetAACF(dt)
+    if not Config.AntiAimEnabled then return nil end
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    local yO = math.rad(Config.AntiAimYaw); local pO = math.rad(Config.AntiAimPitch); local bY = 0
+    local m = Config.AntiAimMode
+    if m == "Spin" then aaAngle = aaAngle + dt*20; bY = aaAngle
+    elseif m == "Backwards" then local lv = hrp.CFrame.LookVector; bY = math.atan2(-lv.X,-lv.Z)+math.pi
+    elseif m == "Backwards at Targets" then
+        local cp, cd = nil, math.huge
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and IsAlive(p) and not IsTeammate(p) then
+                local pH = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+                if pH then local d = (pH.Position-hrp.Position).Magnitude; if d<cd then cd=d; cp=p end end
+            end
+        end
+        if cp and cp.Character then local tH = cp.Character:FindFirstChild("HumanoidRootPart"); if tH then local d=(tH.Position-hrp.Position); bY=math.atan2(d.X,d.Z)+math.pi end
+        else bY = math.atan2(-hrp.CFrame.LookVector.X,-hrp.CFrame.LookVector.Z) end
+    elseif m == "Random" then bY = math.random()*math.pi*2
+    elseif m == "Jitter" then aaJitT=aaJitT+dt; if aaJitT>=0.1 then aaJit=not aaJit; aaJitT=0 end; local lv=hrp.CFrame.LookVector; bY=math.atan2(-lv.X,-lv.Z)+(aaJit and 1.5 or -1.5)
+    elseif m == "Custom" then bY = 0 end
+    return CFrame.new(hrp.Position) * CFrame.Angles(pO, bY+yO, 0)
+end
+
+-- ═══════════════════════════════════════
+-- THIRD PERSON
+-- ═══════════════════════════════════════
+local function ForceTP()
+    if not Config.ThirdPersonEnabled then return end
+    pcall(function()
+        if LocalPlayer.CameraMode ~= Enum.CameraMode.Classic then LocalPlayer.CameraMode = Enum.CameraMode.Classic end
+        if LocalPlayer.CameraMinZoomDistance ~= Config.ThirdPersonDistance then LocalPlayer.CameraMinZoomDistance = Config.ThirdPersonDistance end
+        if LocalPlayer.CameraMaxZoomDistance ~= Config.ThirdPersonDistance then LocalPlayer.CameraMaxZoomDistance = Config.ThirdPersonDistance end
+    end)
+end
+RunService.RenderStepped:Connect(ForceTP)
+RunService.Heartbeat:Connect(ForceTP)
+RunService.Stepped:Connect(ForceTP)
+task.spawn(function() while true do task.wait(); ForceTP() end end)
+LocalPlayer:GetPropertyChangedSignal("CameraMode"):Connect(ForceTP)
+LocalPlayer:GetPropertyChangedSignal("CameraMinZoomDistance"):Connect(ForceTP)
+LocalPlayer:GetPropertyChangedSignal("CameraMaxZoomDistance"):Connect(ForceTP)
+
+-- ═══════════════════════════════════════
+-- MAIN LOOP
+-- ═══════════════════════════════════════
+local rightMouseDown = false
+UserInputService.InputBegan:Connect(function(input, gpe) if gpe then return end; if input.UserInputType == Enum.UserInputType.MouseButton2 then rightMouseDown = true end end)
+UserInputService.InputEnded:Connect(function(input, gpe) if input.UserInputType == Enum.UserInputType.MouseButton2 then rightMouseDown = false end end)
+
+RunService.RenderStepped:Connect(function(dt)
+    FOVCircle.Position = GetScreenCenter()
+    FOVCircle.Radius = Config.FOV
+    FOVCircle.Visible = Config.Enabled and Config.ShowFOV
+
+    for p, _ in pairs(ESPObjects) do UpdateESP(p) end
+
+    -- Aimbot (usa hitboxes)
+    if Config.Enabled and Config.AimbotEnabled and rightMouseDown then
+        local t = GetClosestTarget()
+        if t then
+            local ap = GetAimTarget(t)
+            if ap then
+                local sp, on = Camera:WorldToViewportPoint(ap.Position)
+                if on then local c = GetScreenCenter(); mousemoverel((sp.X-c.X)/Config.AimSmooth, (sp.Y-c.Y)/Config.AimSmooth) end
+            end
+        end
+    end
+
+    if Config.Enabled and Config.AntiAimEnabled then
+        local cf = GetAACF(dt)
+        if cf then local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"); if hrp then hrp.CFrame = CFrame.new(hrp.Position)*(cf-cf.Position) end end
+    end
+
+    if Config.Enabled and Config.FlyEnabled then
+        local char = LocalPlayer.Character; local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            if not FlyBV then StartFly() end
+            if FlyBV and FlyBG then
+                local camCF = Camera.CFrame; local md = Vector3.new(0,0,0)
+                if FlyKeys.W then md = md + camCF.LookVector end
+                if FlyKeys.S then md = md - camCF.LookVector end
+                if FlyKeys.A then md = md - camCF.RightVector end
+                if FlyKeys.D then md = md + camCF.RightVector end
+                if FlyKeys.Space then md = md + Vector3.new(0,1,0) end
+                if FlyKeys.LShift then md = md - Vector3.new(0,1,0) end
+                if md.Magnitude > 0 then md = md.Unit end
+                FlyBV.Velocity = md * Config.FlySpeed
+                FlyBG.CFrame = CFrame.new(hrp.Position, hrp.Position + camCF.LookVector)
+            end
+        end
+    else if FlyBV then StopFly() end end
+end)
+
+-- ═══════════════════════════════════════
+-- TRIGGERBOT
+-- ═══════════════════════════════════════
+task.spawn(function()
+    while true do
+        task.wait(0.01)
+        if Config.Enabled and Config.TriggerbotEnabled then
+            local origin = Camera.CFrame.Position; local dir = Camera.CFrame.LookVector * Config.MaxDistance
+            local rp = RaycastParams.new(); rp.FilterType = Enum.RaycastFilterType.Blacklist
+            local fl = {Camera}; if LocalPlayer.Character then table.insert(fl, LocalPlayer.Character) end; rp.FilterDescendantsInstances = fl
+            local result = workspace:Raycast(origin, dir, rp)
+            if result and result.Instance then
+                -- Check hitboxes too
+                local hitModel = result.Instance:FindFirstAncestorOfClass("Model")
+                local hp = hitModel and Players:GetPlayerFromCharacter(hitModel)
+                -- Also check if hit a hitbox in workspace
+                if not hp then
+                    for _, p in ipairs(Players:GetPlayers()) do
+                        local c = workspace:FindFirstChild(p.Name)
+                        if c and result.Instance:IsDescendantOf(c) then hp = p; break end
+                    end
+                end
+                if hp and hp ~= LocalPlayer and IsAlive(hp) and not IsTeammate(hp) then
+                    if Config.TriggerDelay > 0 then task.wait(Config.TriggerDelay/1000) end
+                    pcall(function() mouse1click() end)
+                end
+            end
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════
+-- AUTO SHOOT
+-- ═══════════════════════════════════════
+task.spawn(function()
+    while true do
+        task.wait(Config.AutoShootDelay / 1000)
+        if Config.Enabled and Config.AutoShootEnabled then
+            local t = GetClosestTarget()
+            if t then
+                if Config.SilentAimEnabled and ShootRemote then
+                    FabricateShoot(ShootRemote, t)
+                else
+                    pcall(function() mouse1click() end)
+                end
+            end
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════
+-- LINORIA UI
+-- ═══════════════════════════════════════
+local LinoriaURL = "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/"
+local Library = loadstring(game:HttpGet(LinoriaURL .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(LinoriaURL .. "addons/ThemeManager.lua"))()
+local SaveManager = loadstring(game:HttpGet(LinoriaURL .. "addons/SaveManager.lua"))()
+
+local Window = Library:CreateWindow({
+    Title = "ARTEMIS V2 - GUNACTION + HITBOXES",
+    Center = true, AutoShow = true, TabPadding = 2, MenuFadeTime = 0.15,
+})
+
+-- ═══ AIM ═══
+local AimTab = Window:AddTab("Aim")
+local AG = AimTab:AddLeftGroupbox("General")
+local AA = AimTab:AddRightGroupbox("Aimbot")
+AG:AddToggle("Enabled", {Text = "Activar ARTEMIS", Default = true}):AddKeyPicker("EnabledKey", {Default = "RightShift", NoUI = false, Text = "Toggle"})
+AG:AddToggle("ShowFOV", {Text = "Mostrar FOV Circle", Default = true})
+AG:AddSlider("FOV", {Text = "FOV Radius", Default = 250, Min = 50, Max = 800, Suffix = "px", Rounding = 0})
+AG:AddSlider("MaxDistance", {Text = "Max Distance", Default = 1000, Min = 100, Max = 5000, Suffix = "m", Rounding = 0})
+AG:AddToggle("TeamCheck", {Text = "Team Check", Default = true})
+AG:AddToggle("VisualCheck", {Text = "Visibility Check", Default = true})
+AG:AddDropdown("AimPart", {Values = {"Head","Body"}, Default = "Head", Text = "Aim Part (Hitbox)"})
+AA:AddToggle("AimbotEnabled", {Text = "Aimbot (Right Click)", Default = false})
+AA:AddSlider("AimSmooth", {Text = "Smoothing", Default = 25, Min = 1, Max = 100, Suffix = "", Rounding = 0})
+
+-- ═══ COMBAT ═══
+local CombatTab = Window:AddTab("Combat")
+local CS = CombatTab:AddLeftGroupbox("Silent Aim")
+local CE = CombatTab:AddRightGroupbox("Combat")
+local CK = CombatTab:AddLeftGroupbox("Kill Aura")
+local CAA = CombatTab:AddRightGroupbox("Anti-Aim")
+CS:AddToggle("SilentAimEnabled", {Text = "Silent Aim", Default = false, Tooltip = "Redirige a HeadHitbox/BodyHitbox"})
+CS:AddToggle("SilentAimDebug", {Text = "Debug", Default = false})
+CS:AddToggle("NoSpread", {Text = "No Spread", Default = false})
+CE:AddToggle("TriggerbotEnabled", {Text = "Triggerbot", Default = false})
+CE:AddSlider("TriggerDelay", {Text = "Trigger Delay", Default = 0, Min = 0, Max = 500, Suffix = "ms", Rounding = 0})
+CE:AddDivider()
+CE:AddToggle("AutoShootEnabled", {Text = "Auto Shoot", Default = false})
+CE:AddSlider("AutoShootDelay", {Text = "Auto Shoot Delay", Default = 100, Min = 10, Max = 1000, Suffix = "ms", Rounding = 0})
+CK:AddToggle("KillAuraEnabled", {Text = "Kill Aura", Default = false})
+CK:AddSlider("KillAuraRange", {Text = "KA Range", Default = 50, Min = 10, Max = 500, Suffix = "m", Rounding = 0})
+CK:AddSlider("KillAuraDelay", {Text = "KA Delay", Default = 50, Min = 10, Max = 500, Suffix = "ms", Rounding = 0})
+CK:AddToggle("KillAuraMulti", {Text = "Multi Target", Default = false})
+CAA:AddToggle("AntiAimEnabled", {Text = "Anti-Aim", Default = false})
+CAA:AddDropdown("AntiAimMode", {Values = {"Spin","Backwards","Backwards at Targets","Random","Jitter","Custom"}, Default = "Spin", Text = "AA Mode"})
+CAA:AddSlider("AntiAimYaw", {Text = "Yaw Offset", Default = 0, Min = -180, Max = 180, Suffix = "°", Rounding = 0})
+CAA:AddSlider("AntiAimPitch", {Text = "Pitch Offset", Default = 0, Min = -90, Max = 90, Suffix = "°", Rounding = 0})
+
+-- ═══ MOVEMENT ═══
+local MoveTab = Window:AddTab("Movement")
+local MF = MoveTab:AddLeftGroupbox("Fly")
+local MTP = MoveTab:AddRightGroupbox("Camera")
+MF:AddToggle("FlyEnabled", {Text = "Fly", Default = false})
+MF:AddSlider("FlySpeed", {Text = "Fly Speed", Default = 50, Min = 10, Max = 500, Suffix = "", Rounding = 0})
+MF:AddLabel("WASD+Space+Shift")
+MTP:AddToggle("ThirdPersonEnabled", {Text = "Third Person", Default = false})
+MTP:AddSlider("ThirdPersonDistance", {Text = "TP Distance", Default = 15, Min = 5, Max = 50, Suffix = "m", Rounding = 0})
+
+-- ═══ VISUALS ═══
+local VisTab = Window:AddTab("Visuals")
+local VE = VisTab:AddLeftGroupbox("ESP")
+local VO = VisTab:AddRightGroupbox("ESP Options")
+VE:AddToggle("ESPEnabled", {Text = "ESP", Default = true})
+VE:AddToggle("ESPBoxes", {Text = "3D Boxes (Hitbox)", Default = true})
+VE:AddToggle("ESPNames", {Text = "Names", Default = true})
+VE:AddToggle("ESPHealth", {Text = "Health", Default = true})
+VE:AddToggle("ESPDistance", {Text = "Distance", Default = true})
+VE:AddToggle("ESPTracers", {Text = "Tracers", Default = true})
+VO:AddToggle("ESPVisibleCheck", {Text = "Visible Check", Default = false})
+VO:AddSlider("ESPMaxDistance", {Text = "Max Distance", Default = 1500, Min = 100, Max = 5000, Suffix = "m", Rounding = 0})
+VO:AddDropdown("TracerOrigin", {Values = {"Bottom","Center","Top"}, Default = "Bottom", Text = "Tracer Origin"})
+
+-- ═══ UI ═══
+local UITab = Window:AddTab("UI Settings")
+local MG = UITab:AddLeftGroupbox("Menu")
+MG:AddButton("Unload ARTEMIS", function() if genv.ARTEMIS_CLEANUP then pcall(genv.ARTEMIS_CLEANUP) end; Library:Unload() end)
+MG:AddLabel("Menu bind: RightShift")
+local TG = UITab:AddRightGroupbox("Theme")
+ThemeManager:SetLibrary(Library); SaveManager:SetLibrary(Library)
+ThemeManager:SetFolder("ARTEMIS_V2_GA"); SaveManager:SetFolder("ARTEMIS_V2_GA")
+ThemeManager:ApplyToGroupbox(TG); SaveManager:BuildConfigSection(UITab)
+Library.ToggleKeybind = Options.EnabledKey
+
+-- ═══════════════════════════════════════
+-- BIND UI → CONFIG
+-- ═══════════════════════════════════════
+Toggles.Enabled:OnChanged(function() Config.Enabled = Toggles.Enabled.Value end)
+Toggles.ShowFOV:OnChanged(function() Config.ShowFOV = Toggles.ShowFOV.Value end)
+Options.FOV:OnChanged(function() Config.FOV = Options.FOV.Value end)
+Options.MaxDistance:OnChanged(function() Config.MaxDistance = Options.MaxDistance.Value end)
+Toggles.TeamCheck:OnChanged(function() Config.TeamCheck = Toggles.TeamCheck.Value end)
+Toggles.VisualCheck:OnChanged(function() Config.VisualCheck = Toggles.VisualCheck.Value end)
+Options.AimPart:OnChanged(function() Config.AimPart = Options.AimPart.Value end)
+Toggles.AimbotEnabled:OnChanged(function() Config.AimbotEnabled = Toggles.AimbotEnabled.Value end)
+Options.AimSmooth:OnChanged(function() Config.AimSmooth = Options.AimSmooth.Value end)
+Toggles.SilentAimEnabled:OnChanged(function() Config.SilentAimEnabled = Toggles.SilentAimEnabled.Value end)
+Toggles.SilentAimDebug:OnChanged(function() Config.SilentAimDebug = Toggles.SilentAimDebug.Value end)
+Toggles.NoSpread:OnChanged(function() Config.NoSpread = Toggles.NoSpread.Value end)
+Toggles.TriggerbotEnabled:OnChanged(function() Config.TriggerbotEnabled = Toggles.TriggerbotEnabled.Value end)
+Options.TriggerDelay:OnChanged(function() Config.TriggerDelay = Options.TriggerDelay.Value end)
+Toggles.AutoShootEnabled:OnChanged(function() Config.AutoShootEnabled = Toggles.AutoShootEnabled.Value end)
+Options.AutoShootDelay:OnChanged(function() Config.AutoShootDelay = Options.AutoShootDelay.Value end)
+Toggles.KillAuraEnabled:OnChanged(function() Config.KillAuraEnabled = Toggles.KillAuraEnabled.Value end)
+Options.KillAuraRange:OnChanged(function() Config.KillAuraRange = Options.KillAuraRange.Value end)
+Options.KillAuraDelay:OnChanged(function() Config.KillAuraDelay = Options.KillAuraDelay.Value end)
+Toggles.KillAuraMulti:OnChanged(function() Config.KillAuraMulti = Toggles.KillAuraMulti.Value end)
+Toggles.FlyEnabled:OnChanged(function() Config.FlyEnabled = Toggles.FlyEnabled.Value; if not Config.FlyEnabled then StopFly() end end)
+Options.FlySpeed:OnChanged(function() Config.FlySpeed = Options.FlySpeed.Value end)
+Toggles.ESPEnabled:OnChanged(function() Config.ESPEnabled = Toggles.ESPEnabled.Value end)
+Toggles.ESPBoxes:OnChanged(function() Config.ESPBoxes = Toggles.ESPBoxes.Value end)
+Toggles.ESPNames:OnChanged(function() Config.ESPNames = Toggles.ESPNames.Value end)
+Toggles.ESPHealth:OnChanged(function() Config.ESPHealth = Toggles.ESPHealth.Value end)
+Toggles.ESPDistance:OnChanged(function() Config.ESPDistance = Toggles.ESPDistance.Value end)
+Toggles.ESPTracers:OnChanged(function() Config.ESPTracers = Toggles.ESPTracers.Value end)
+Toggles.ESPVisibleCheck:OnChanged(function() Config.ESPVisibleCheck = Toggles.ESPVisibleCheck.Value end)
+Options.ESPMaxDistance:OnChanged(function() Config.ESPMaxDistance = Options.ESPMaxDistance.Value end)
+Options.TracerOrigin:OnChanged(function() Config.TracerOrigin = Options.TracerOrigin.Value end)
+Toggles.ThirdPersonEnabled:OnChanged(function() Config.ThirdPersonEnabled = Toggles.ThirdPersonEnabled.Value; if not Toggles.ThirdPersonEnabled.Value then pcall(function() LocalPlayer.CameraMode=OriginalCamMode; LocalPlayer.CameraMinZoomDistance=OriginalMinZoom; LocalPlayer.CameraMaxZoomDistance=OriginalMaxZoom end) end end)
+Options.ThirdPersonDistance:OnChanged(function() Config.ThirdPersonDistance = Options.ThirdPersonDistance.Value end)
+Toggles.AntiAimEnabled:OnChanged(function() Config.AntiAimEnabled = Toggles.AntiAimEnabled.Value end)
+Options.AntiAimMode:OnChanged(function() Config.AntiAimMode = Options.AntiAimMode.Value end)
+Options.AntiAimYaw:OnChanged(function() Config.AntiAimYaw = Options.AntiAimYaw.Value end)
+Options.AntiAimPitch:OnChanged(function() Config.AntiAimPitch = Options.AntiAimPitch.Value end)
+
+-- ═══════════════════════════════════════
+-- CLEANUP
+-- ═══════════════════════════════════════
+genv.ARTEMIS_CLEANUP = function()
+    StopFly()
+    pcall(function() LocalPlayer.CameraMode = OriginalCamMode end)
+    pcall(function() LocalPlayer.CameraMinZoomDistance = OriginalMinZoom end)
+    pcall(function() LocalPlayer.CameraMaxZoomDistance = OriginalMaxZoom end)
+    for p, _ in pairs(ESPObjects) do ClearESP(p) end
+    pcall(function() FOVCircle:Remove() end)
+end
+Library:OnUnload(function() if genv.ARTEMIS_CLEANUP then pcall(genv.ARTEMIS_CLEANUP) end end)
+
+Library:Notify("ARTEMIS V2 loaded | Hitbox ESP + Shotgun Silent Aim", 5)tance = Options.ESPMaxDistance.Value end)
+Options.TracerOrigin:OnChanged(function() Config.TracerOrigin = Options.TracerOrigin.Value end)
+Toggles.ThirdPersonEnabled:OnChanged(function() Config.ThirdPersonEnabled = Toggles.ThirdPersonEnabled.Value; if not Toggles.ThirdPersonEnabled.Value then pcall(function() LocalPlayer.CameraMode=OriginalCamMode; LocalPlayer.CameraMinZoomDistance=OriginalMinZoom; LocalPlayer.CameraMaxZoomDistance=OriginalMaxZoom end) end end)
+Options.ThirdPersonDistance:OnChanged(function() Config.ThirdPersonDistance = Options.ThirdPersonDistance.Value end)
+Toggles.AntiAimEnabled:OnChanged(function() Config.AntiAimEnabled = Toggles.AntiAimEnabled.Value end)
+Options.AntiAimMode:OnChanged(function() Config.AntiAimMode = Options.AntiAimMode.Value end)
+Options.AntiAimYaw:OnChanged(function() Config.AntiAimYaw = Options.AntiAimYaw.Value end)
+Options.AntiAimPitch:OnChanged(function() Config.AntiAimPitch = Options.AntiAimPitch.Value end)
+
+-- ═══════════════════════════════════════
+-- CLEANUP
+-- ═══════════════════════════════════════
+genv.ARTEMIS_CLEANUP = function()
+    StopFly()
+    pcall(function() LocalPlayer.CameraMode = OriginalCamMode end)
+    pcall(function() LocalPlayer.CameraMinZoomDistance = OriginalMinZoom end)
+    pcall(function() LocalPlayer.CameraMaxZoomDistance = OriginalMaxZoom end)
+    for p, _ in pairs(ESPObjects) do ClearESP(p) end
+    pcall(function() FOVCircle:Remove() end)
+end
+Library:OnUnload(function() if genv.ARTEMIS_CLEANUP then pcall(genv.ARTEMIS_CLEANUP) end end)
+
+Library:Notify("ARTEMIS V2 loaded | Hitbox ESP + Shotgun Silent Aim", 5)
